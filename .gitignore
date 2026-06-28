@@ -1,0 +1,53 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Test / coverage
+coverage
+.vitest
+.playwright
+
+# Caches
+.cache
+*.tsbuildinfo
+
+# Local app data / databases
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sqlite-journal
+
+# Local imports / financial data
+/imports
+/data
+/exports
+*.csv
+*.ofx
+*.qif
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
