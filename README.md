@@ -119,6 +119,11 @@ Example:
 
 Support importing one or more CSV files.
 
+CSV files are selected from the UI, but file reading, parsing, duplicate
+detection, and SQLite writes are handled by Node.js in the Electron main
+process through a narrow preload/IPC bridge. The React renderer must not access
+raw Node.js APIs, filesystem paths, CSV contents, or SQLite directly.
+
 Requirements:
 
 * import multiple files
@@ -208,6 +213,12 @@ Current planned stack:
 * Prisma (or Drizzle after evaluation)
 
 Architecture should remain modular and easy to maintain.
+
+Electron architecture should keep `main`, `preload`, and `renderer`
+responsibilities separate. Node.js-only work such as filesystem access, CSV
+loading/parsing, duplicate detection, and SQLite persistence belongs in the
+Electron main process. React should only render UI and call typed preload/IPC
+methods.
 
 ---
 

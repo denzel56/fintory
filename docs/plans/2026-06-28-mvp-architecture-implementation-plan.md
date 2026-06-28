@@ -65,6 +65,20 @@ Proposed folders:
 - analytics.getDashboard(query), analytics.getExpensesByMonth(query), analytics.getExpensesByCategory(query), analytics.getLargestExpenses(query).
 
 ## CSV import pipeline
+CSV import must be handled by Node.js code in the Electron main process. The React renderer shows import UI and calls typed preload/IPC methods, but it must not access raw Node.js APIs, filesystem paths, CSV contents, or SQLite directly.
+
+Renderer responsibilities:
+- show import UI, empty states, progress, errors, and summary.
+- call typed preload methods such as import.selectCsvFiles() and import.importCsvFiles(input).
+
+Main process responsibilities:
+- open native file dialogs.
+- read selected CSV files using Node.js filesystem APIs.
+- parse and validate CSV rows.
+- normalize transactions.
+- detect duplicates.
+- write import batches and transactions to SQLite.
+
 1. Select files.
 2. Read file.
 3. Detect or select adapter.
