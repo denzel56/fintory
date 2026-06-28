@@ -31,7 +31,7 @@ Fintory is a local-first desktop finance application. User financial data must s
 4. Load `git-workflow` for non-trivial tasks and split the plan into commit-worthy phases.
 5. Produce a plan with files to change, implementation phases, verification, and risks.
 6. Each phase should be small enough for one focused commit after implementation.
-7. Save the plan to `docs/plan/YYYY-MM-DD-<task>.md` when useful.
+7. Save the plan to `docs/plans/YYYY-MM-DD-<task>.md` when useful.
 
 ## Output
 
