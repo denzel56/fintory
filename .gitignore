@@ -58,3 +58,6 @@ coverage
 .opencode/package-lock.json
 .opencode/bun.lock
 .opencode/.gitignore
+
+# Local workflow notes
+ISSUE_WORKFLOW.local.md

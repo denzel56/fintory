@@ -1,0 +1,68 @@
+name: Feature
+description: Plan a focused Fintory feature or implementation task.
+title: "Feature: "
+labels:
+  - "type: feature"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for small, reviewable feature work. Keep the scope tied to Fintory's local-first MVP workflow.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What should change, and why is it useful for the MVP?
+      placeholder: Add a short feature summary.
+    validations:
+      required: true
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks
+      description: Break the work into small implementation steps.
+      value: |
+        - [ ] 
+        - [ ] 
+        - [ ] 
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: What must be true before this issue is done?
+      value: |
+        - [ ] User-facing behavior is implemented.
+        - [ ] Empty/loading/error states are handled where relevant.
+        - [ ] The change stays within MVP scope.
+    validations:
+      required: true
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Impact Areas
+      description: Select all areas this issue touches.
+      options:
+        - label: Renderer/UI
+        - label: Electron main/preload/IPC
+        - label: SQLite schema, migrations, or repositories
+        - label: CSV import or bank adapters
+        - label: Privacy/security-sensitive financial data
+        - label: Packaging/build workflow
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Commands or manual checks required before closing.
+      value: |
+        - [ ] `npm run lint`
+        - [ ] `npm run build`
+        - [ ] Manual check:
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Open questions, constraints, or links to the plan.

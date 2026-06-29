@@ -1,0 +1,61 @@
+name: Bug
+description: Report a reproducible Fintory bug or regression.
+title: "Bug: "
+labels:
+  - "type: bug"
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken?
+      placeholder: Describe the bug briefly.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Impact Areas
+      options:
+        - label: Renderer/UI
+        - label: Electron main/preload/IPC
+        - label: SQLite schema, migrations, or repositories
+        - label: CSV import or bank adapters
+        - label: Privacy/security-sensitive financial data
+        - label: Packaging/build workflow
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: How was the fix checked?
+      value: |
+        - [ ] `npm run lint`
+        - [ ] `npm run build`
+        - [ ] Manual reproduction check:
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Logs or screenshots. Do not paste raw financial data, CSV contents, account numbers, or private file paths.
