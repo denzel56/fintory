@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import './App.css'
 import { AppLayout } from './renderer/layout/AppLayout'
 import { AboutPage } from './renderer/pages/AboutPage'
 import { CategoriesPage } from './renderer/pages/CategoriesPage'

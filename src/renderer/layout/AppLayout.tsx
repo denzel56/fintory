@@ -1,3 +1,16 @@
+import {
+  AppShell,
+  Badge,
+  Burger,
+  Card,
+  Group,
+  NavLink,
+  Stack,
+  Text,
+  ThemeIcon,
+  Title,
+} from '@mantine/core'
+import { useDisclosure } from '@mantine/hooks'
 import type { PropsWithChildren } from 'react'
 import type { AppPageId } from '../pages/types'
 
@@ -52,59 +65,102 @@ export function AppLayout({
   children,
   onPageChange,
 }: AppLayoutProps) {
+  const [mobileOpened, { close: closeMobileNavigation, toggle }] =
+    useDisclosure(false)
+
+  const handlePageChange = (pageId: AppPageId) => {
+    onPageChange(pageId)
+    closeMobileNavigation()
+  }
+
   return (
-    <main className="app-shell">
-      <aside className="sidebar" aria-label="Fintory navigation">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            F
-          </span>
-          <div>
-            <p className="eyebrow">Local finance archive</p>
-            <h1>Fintory</h1>
-          </div>
-        </div>
+    <AppShell
+      header={{ height: 72 }}
+      navbar={{
+        width: 320,
+        breakpoint: 'sm',
+        collapsed: { mobile: !mobileOpened },
+      }}
+      padding="xl"
+    >
+      <AppShell.Header px="lg">
+        <Group h="100%" justify="space-between">
+          <Group gap="sm">
+            <Burger
+              hiddenFrom="sm"
+              opened={mobileOpened}
+              size="sm"
+              onClick={toggle}
+            />
+            <ThemeIcon radius="md" size="lg" variant="gradient">
+              F
+            </ThemeIcon>
+            <div>
+              <Text c="dimmed" fw={700} size="xs" tt="uppercase">
+                Local finance archive
+              </Text>
+              <Title order={1} size="h3">
+                Fintory
+              </Title>
+            </div>
+          </Group>
+          <Badge variant="light">MVP shell</Badge>
+        </Group>
+      </AppShell.Header>
 
-        <nav className="navigation">
+      <AppShell.Navbar p="md">
+        <Stack gap="xs">
           {navigationItems.map((item) => (
-            <button
-              aria-current={item.id === activePage ? 'page' : undefined}
-              className={item.id === activePage ? 'nav-item active' : 'nav-item'}
+            <NavLink
+              active={item.id === activePage}
+              description={item.description}
               key={item.id}
-              type="button"
-              onClick={() => onPageChange(item.id)}
-            >
-              <span>{item.label}</span>
-              <small>{item.description}</small>
-            </button>
+              label={item.label}
+              variant="light"
+              onClick={() => handlePageChange(item.id)}
+            />
           ))}
-        </nav>
-      </aside>
+        </Stack>
+      </AppShell.Navbar>
 
-      <section className="workspace">
-        <header className="hero-panel">
-          <p className="eyebrow">MVP shell</p>
-          <h2>Build your private financial history from bank CSV files.</h2>
-          <p>
-            Fintory will help create a local project, import statement exports,
-            preserve history, and explore spending without cloud sync, telemetry,
-            or bank API connections.
-          </p>
-        </header>
+      <AppShell.Main>
+        <Stack gap="xl">
+          <Card bg="blue-light" padding="xl" radius="lg" withBorder>
+            <Stack gap="sm">
+              <Text c="blue" fw={700} size="xs" tt="uppercase">
+                MVP shell
+              </Text>
+              <Title maw={760} order={2} size="3rem">
+                Build your private financial history from bank CSV files.
+              </Title>
+              <Text c="dimmed" maw={820} size="lg">
+                Fintory will help create a local project, import statement
+                exports, preserve history, and explore spending without cloud
+                sync, telemetry, or bank API connections.
+              </Text>
+            </Stack>
+          </Card>
 
-        <section className="content-grid" aria-label="Application overview">
-          {children}
+          <Group align="stretch" grow preventGrowOverflow={false}>
+            {children}
 
-          <article className="empty-card">
-            <p className="eyebrow">Primary workflow</p>
-            <ol className="workflow-list">
-              {workflowSteps.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
-          </article>
-        </section>
-      </section>
-    </main>
+            <Card miw={280} padding="xl" radius="lg" withBorder>
+              <Stack gap="md">
+                <Text c="dimmed" fw={700} size="xs" tt="uppercase">
+                  Primary workflow
+                </Text>
+                <Stack component="ol" gap="md" m={0} pl="md">
+                  {workflowSteps.map((step) => (
+                    <Text component="li" fw={600} key={step}>
+                      {step}
+                    </Text>
+                  ))}
+                </Stack>
+              </Stack>
+            </Card>
+          </Group>
+        </Stack>
+      </AppShell.Main>
+    </AppShell>
   )
 }
