@@ -1,3 +1,5 @@
+import { Card, Stack, Text, Title } from '@mantine/core'
+
 type PlaceholderPageProps = {
   eyebrow: string
   title: string
@@ -14,14 +16,22 @@ export function PlaceholderPage({
   title,
 }: PlaceholderPageProps) {
   return (
-    <article className="empty-card primary-card">
-      <p className="eyebrow">{eyebrow}</p>
-      <h3>{title}</h3>
-      <p>{description}</p>
-      <div className="empty-state">
-        <strong>{emptyTitle}</strong>
-        <span>{emptyDescription}</span>
-      </div>
-    </article>
+    <Card padding="xl" radius="lg" withBorder>
+      <Stack gap="md">
+        <Text c="dimmed" fw={700} size="xs" tt="uppercase">
+          {eyebrow}
+        </Text>
+        <Title order={3}>{title}</Title>
+        <Text c="dimmed">{description}</Text>
+        <Card bg="blue-light" padding="lg" radius="md" withBorder>
+          <Stack gap={4}>
+            <Text fw={700}>{emptyTitle}</Text>
+            <Text c="dimmed" size="sm">
+              {emptyDescription}
+            </Text>
+          </Stack>
+        </Card>
+      </Stack>
+    </Card>
   )
 }
