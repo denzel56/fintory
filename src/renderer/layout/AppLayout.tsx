@@ -87,6 +87,7 @@ export function AppLayout({
         <Group h="100%" justify="space-between">
           <Group gap="sm">
             <Burger
+              aria-label="Toggle navigation"
               hiddenFrom="sm"
               opened={mobileOpened}
               size="sm"
