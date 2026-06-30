@@ -1,4 +1,5 @@
 import { Card, Stack, Text, Title } from '@mantine/core'
+import type { ReactNode } from 'react'
 
 type PlaceholderPageProps = {
   eyebrow: string
@@ -6,9 +7,11 @@ type PlaceholderPageProps = {
   description: string
   emptyTitle: string
   emptyDescription: string
+  children?: ReactNode
 }
 
 export function PlaceholderPage({
+  children,
   description,
   emptyDescription,
   emptyTitle,
@@ -31,6 +34,7 @@ export function PlaceholderPage({
             </Text>
           </Stack>
         </Card>
+        {children}
       </Stack>
     </Card>
   )

@@ -1,12 +1,14 @@
 import { app, BrowserWindow } from 'electron'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
+import { registerAppIpcHandlers } from './ipc/app.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirectory = path.dirname(currentFilePath)
 const projectRoot = path.resolve(currentDirectory, '../..')
 const rendererBuildPath = path.join(projectRoot, 'dist', 'index.html')
 const rendererBuildUrl = pathToFileURL(rendererBuildPath).toString()
+const preloadPath = path.join(projectRoot, 'dist-electron', 'preload', 'index.js')
 
 const getDevServerUrl = (): URL | null => {
   const configuredUrl = process.env.VITE_DEV_SERVER_URL
@@ -39,6 +41,7 @@ const createMainWindow = async (): Promise<void> => {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: preloadPath,
       sandbox: true,
     },
   })
@@ -60,6 +63,7 @@ const createMainWindow = async (): Promise<void> => {
 }
 
 app.whenReady().then(() => {
+  registerAppIpcHandlers()
   void createMainWindow()
 
   app.on('activate', () => {
