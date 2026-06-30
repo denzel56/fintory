@@ -1,8 +1,8 @@
 import { Alert, Button, Card, Group, Stack, Text, TextInput } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
-import type { CurrentProjectDto, CurrentProjectStateDto } from '../../shared/types/project'
-import { validateProjectName } from '../../shared/validation/project'
+import type { CurrentProjectDto, CurrentProjectStateDto } from '../../../shared/types/project'
+import { validateProjectName } from '../../../shared/validation/project'
 
 type ProjectLoadState =
   | { status: 'loading' }
