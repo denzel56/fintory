@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import { registerAppIpcHandlers } from './ipc/app.js'
+import { registerProjectIpcHandlers } from './ipc/project.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirectory = path.dirname(currentFilePath)
@@ -64,6 +65,7 @@ const createMainWindow = async (): Promise<void> => {
 
 app.whenReady().then(() => {
   registerAppIpcHandlers()
+  registerProjectIpcHandlers()
   void createMainWindow()
 
   app.on('activate', () => {
