@@ -1,5 +1,6 @@
-import { Card, Stack, Text, Title } from '@mantine/core'
+import { Card, Stack, Text } from '@mantine/core'
 import { useEffect, useState } from 'react'
+import { PlaceholderPage } from './PlaceholderPage'
 
 type VersionState =
   | { status: 'loading' }
@@ -59,25 +60,21 @@ export function AboutPage() {
   const versionText = getVersionText(versionState)
 
   return (
-    <Card padding="xl" radius="lg" withBorder>
-      <Stack gap="md">
-        <Text c="dimmed" fw={700} size="xs" tt="uppercase">
-          Settings / About
-        </Text>
-        <Title order={3}>Settings and about placeholder</Title>
-        <Text c="dimmed">
-          A future place for project settings, app version details, and local-first privacy notes.
-        </Text>
-
-        <Card bg="blue-light" padding="lg" radius="md" withBorder>
-          <Stack gap={4}>
-            <Text fw={700}>App version</Text>
-            <Text c="dimmed" size="sm">
-              {versionText}
-            </Text>
-          </Stack>
-        </Card>
-      </Stack>
-    </Card>
+    <PlaceholderPage
+      description="A future place for project settings, app version details, and local-first privacy notes."
+      emptyDescription="Settings will be added only when project lifecycle features exist."
+      emptyTitle="Settings are not available yet."
+      eyebrow="Settings / About"
+      title="Settings and about placeholder"
+    >
+      <Card bg="blue-light" padding="lg" radius="md" withBorder>
+        <Stack gap={4}>
+          <Text fw={700}>App version</Text>
+          <Text c="dimmed" size="sm">
+            {versionText}
+          </Text>
+        </Stack>
+      </Card>
+    </PlaceholderPage>
   )
 }
