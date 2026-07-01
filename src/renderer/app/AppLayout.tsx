@@ -12,7 +12,7 @@ import {
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import type { PropsWithChildren } from 'react'
-import type { AppPageId } from '../pages/types'
+import type { AppPageId } from './navigation'
 
 type NavigationItem = {
   id: AppPageId

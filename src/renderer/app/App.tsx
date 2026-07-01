@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { AppLayout } from './renderer/layout/AppLayout'
-import { AboutPage } from './renderer/pages/AboutPage'
-import { CategoriesPage } from './renderer/pages/CategoriesPage'
-import { DashboardPage } from './renderer/pages/DashboardPage'
-import { ImportPage } from './renderer/pages/ImportPage'
-import { TransactionsPage } from './renderer/pages/TransactionsPage'
-import type { AppPageId } from './renderer/pages/types'
+import { AboutPage } from '../pages/AboutPage'
+import { CategoriesPage } from '../pages/CategoriesPage'
+import { DashboardPage } from '../pages/DashboardPage'
+import { ImportPage } from '../pages/ImportPage'
+import { TransactionsPage } from '../pages/TransactionsPage'
+import { AppLayout } from './AppLayout'
+import type { AppPageId } from './navigation'
 
 const pages = {
   dashboard: DashboardPage,
