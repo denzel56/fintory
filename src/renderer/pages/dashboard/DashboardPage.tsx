@@ -1,4 +1,4 @@
-import { PlaceholderPage } from '../shared/ui/PlaceholderPage'
+import { PlaceholderPage } from '../../shared/ui/PlaceholderPage'
 
 export function DashboardPage() {
   return (

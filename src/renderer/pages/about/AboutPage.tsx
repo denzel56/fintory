@@ -1,7 +1,7 @@
 import { Card, Stack, Text } from '@mantine/core'
 import { useEffect, useState } from 'react'
-import { PlaceholderPage } from '../shared/ui/PlaceholderPage'
-import { ProjectLifecycleCard } from './about/ProjectLifecycleCard'
+import { PlaceholderPage } from '../../shared/ui/PlaceholderPage'
+import { ProjectLifecycleCard } from './ProjectLifecycleCard'
 
 type VersionState =
   | { status: 'loading' }
