@@ -12,6 +12,7 @@ export function openProjectDatabaseConnection(filePath: string): void {
   const database = new DatabaseSync(filePath)
 
   try {
+    database.exec('PRAGMA foreign_keys = ON')
     database.exec('PRAGMA user_version')
     runProjectDatabaseMigrations(database)
   } catch (error) {
