@@ -11,6 +11,7 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "lint": "eslint .",
     "preview": "vite preview",
+    "smoke:sqlite": "npm run build:electron && node scripts/smoke-sqlite-electron.mjs",
     "start:electron": "npm run build && electron ."
   },
   "dependencies": {
