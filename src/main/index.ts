@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { createMainWindow } from './app/create-main-window.js'
+import { closeActiveProjectDatabaseConnection } from './db/project-database-connection.js'
 import { registerIpcHandlers } from './ipc/register-ipc-handlers.js'
 
 app.whenReady().then(() => {
@@ -16,5 +17,13 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
+  }
+})
+
+app.on('before-quit', () => {
+  try {
+    closeActiveProjectDatabaseConnection()
+  } catch {
+    return
   }
 })

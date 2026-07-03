@@ -6,6 +6,10 @@ import type {
   CurrentProjectStateDto,
   ProjectId,
 } from '../../shared/types/project.js'
+import {
+  closeActiveProjectDatabaseConnection,
+  openProjectDatabaseConnection,
+} from '../db/project-database-connection.js'
 
 type CurrentProjectRecord = {
   filePath: string
@@ -22,10 +26,18 @@ export function getCurrentProjectState(): CurrentProjectStateDto {
   return { status: 'open', project: currentProject.project }
 }
 
-export function setCurrentProject(input: {
+export function openCurrentProject(input: {
   filePath: string
   name: string
 }): CurrentProjectDto {
+  const closeResult = closeCurrentProject()
+
+  if (!closeResult.ok) {
+    throw new Error('Current project could not be closed before opening another project.')
+  }
+
+  openProjectDatabaseConnection(input.filePath)
+
   const project: CurrentProjectDto = {
     id: randomUUID(),
     display: {
@@ -46,6 +58,17 @@ export function setCurrentProject(input: {
 
 export function closeCurrentProject(): CloseProjectResult {
   const previousProjectId: ProjectId | null = currentProject?.project.id ?? null
+
+  try {
+    closeActiveProjectDatabaseConnection()
+  } catch {
+    return {
+      ok: false,
+      code: 'project-close-failed',
+      message: 'Project database connection could not be closed.',
+    }
+  }
+
   currentProject = null
 
   return { ok: true, previousProjectId }

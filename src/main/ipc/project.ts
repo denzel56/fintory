@@ -8,7 +8,7 @@ import {
   getCurrentProjectState,
   getProjectDefaultFileName,
   getProjectNameFromFilePath,
-  setCurrentProject,
+  openCurrentProject,
 } from '../project/project-state.js'
 
 export function registerProjectIpcHandlers(): void {
@@ -47,12 +47,20 @@ export function registerProjectIpcHandlers(): void {
       }
     }
 
-    return {
-      ok: true,
-      project: setCurrentProject({
-        filePath: dialogResult.filePath,
-        name: createInput.name,
-      }),
+    try {
+      return {
+        ok: true,
+        project: openCurrentProject({
+          filePath: dialogResult.filePath,
+          name: createInput.name,
+        }),
+      }
+    } catch {
+      return {
+        ok: false,
+        code: 'project-database-open-failed',
+        message: 'Project database could not be opened.',
+      }
     }
   })
 
@@ -88,12 +96,20 @@ export function registerProjectIpcHandlers(): void {
       }
     }
 
-    return {
-      ok: true,
-      project: setCurrentProject({
-        filePath,
-        name: getProjectNameFromFilePath(filePath),
-      }),
+    try {
+      return {
+        ok: true,
+        project: openCurrentProject({
+          filePath,
+          name: getProjectNameFromFilePath(filePath),
+        }),
+      }
+    } catch {
+      return {
+        ok: false,
+        code: 'project-database-open-failed',
+        message: 'Project database could not be opened.',
+      }
     }
   })
 
