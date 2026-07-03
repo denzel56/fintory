@@ -25,7 +25,13 @@ try {
     throw new Error('SQLite smoke check returned an unexpected value.')
   }
 
-  console.log(`SQLite smoke check passed with SQLite ${result.sqliteVersion}.`)
+  if (result.migrationVersion !== 1 || result.appliedMigrationCount !== 1) {
+    throw new Error('SQLite migration smoke check returned an unexpected version.')
+  }
+
+  console.log(
+    `SQLite smoke check passed with SQLite ${result.sqliteVersion} and migration version ${result.migrationVersion}.`,
+  )
 } catch (error) {
   console.error(error)
   process.exit(1)
