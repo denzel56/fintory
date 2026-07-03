@@ -25,6 +25,72 @@ const projectDatabaseMigrations: readonly ProjectDatabaseMigration[] = [
       database.exec('PRAGMA user_version = 1')
     },
   },
+  {
+    id: '0002_core_schema',
+    version: 2,
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS project_meta (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          schema_version INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS categories (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          color TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS import_batches (
+          id TEXT PRIMARY KEY,
+          source_file_name TEXT NOT NULL,
+          source_file_hash TEXT NOT NULL,
+          adapter_id TEXT NOT NULL,
+          imported_at TEXT NOT NULL,
+          row_count INTEGER NOT NULL DEFAULT 0 CHECK (row_count >= 0),
+          inserted_count INTEGER NOT NULL DEFAULT 0 CHECK (inserted_count >= 0),
+          duplicate_count INTEGER NOT NULL DEFAULT 0 CHECK (duplicate_count >= 0),
+          failed_count INTEGER NOT NULL DEFAULT 0 CHECK (failed_count >= 0)
+        );
+
+        CREATE TABLE IF NOT EXISTS transactions (
+          id TEXT PRIMARY KEY,
+          transaction_date TEXT NOT NULL,
+          description TEXT NOT NULL,
+          merchant TEXT,
+          amount_minor INTEGER NOT NULL,
+          currency TEXT NOT NULL,
+          direction TEXT NOT NULL CHECK (direction IN ('income', 'expense')),
+          category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
+          source_hash TEXT NOT NULL,
+          import_batch_id TEXT REFERENCES import_batches(id) ON DELETE SET NULL,
+          raw_description TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_transactions_transaction_date
+          ON transactions(transaction_date);
+        CREATE INDEX IF NOT EXISTS idx_transactions_category_id
+          ON transactions(category_id);
+        CREATE INDEX IF NOT EXISTS idx_transactions_direction
+          ON transactions(direction);
+        CREATE INDEX IF NOT EXISTS idx_transactions_source_hash
+          ON transactions(source_hash);
+        CREATE INDEX IF NOT EXISTS idx_transactions_import_batch_id
+          ON transactions(import_batch_id);
+        CREATE INDEX IF NOT EXISTS idx_import_batches_source_file_hash
+          ON import_batches(source_file_hash);
+
+        PRAGMA user_version = 2;
+      `)
+    },
+  },
 ]
 
 const ensureMigrationMetadataTable = (database: DatabaseSync): void => {

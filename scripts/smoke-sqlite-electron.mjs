@@ -25,8 +25,16 @@ try {
     throw new Error('SQLite smoke check returned an unexpected value.')
   }
 
-  if (result.migrationVersion !== 1 || result.appliedMigrationCount !== 1) {
+  if (result.migrationVersion !== 2 || result.appliedMigrationCount !== 2) {
     throw new Error('SQLite migration smoke check returned an unexpected version.')
+  }
+
+  if (
+    result.coreSchemaTableCount !== 4 ||
+    result.coreSchemaIndexCount !== 6 ||
+    result.coreSchemaRowCount !== 0
+  ) {
+    throw new Error('SQLite core schema smoke check returned an unexpected schema.')
   }
 
   console.log(
