@@ -114,7 +114,7 @@ export function ProjectLifecycleCard() {
         setProjectLoadState(getOpenProjectLoadState(result.project))
         setProjectName('')
         setProjectNameError(null)
-        setProjectMessage('Project selected in memory. SQLite storage is not created yet.')
+        setProjectMessage('Project created and connected to local SQLite storage.')
       } else {
         setProjectMessage(result.message)
       }
@@ -139,7 +139,7 @@ export function ProjectLifecycleCard() {
 
       if (result.ok) {
         setProjectLoadState(getOpenProjectLoadState(result.project))
-        setProjectMessage('Project opened in memory. SQLite storage is not connected yet.')
+        setProjectMessage('Project opened and connected to local SQLite storage.')
       } else {
         setProjectMessage(result.message)
       }
