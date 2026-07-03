@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
+import { runProjectDatabaseMigrations } from './migrations/project-database-migrations.js'
 
 type ActiveProjectDatabaseConnection = {
   readonly database: DatabaseSync
@@ -12,6 +13,7 @@ export function openProjectDatabaseConnection(filePath: string): void {
 
   try {
     database.exec('PRAGMA user_version')
+    runProjectDatabaseMigrations(database)
   } catch (error) {
     database.close()
     throw error
