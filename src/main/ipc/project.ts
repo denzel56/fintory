@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import type { OpenDialogOptions, SaveDialogOptions } from 'electron'
 import { projectIpcChannels } from '../../shared/ipc/project.js'
@@ -48,11 +49,14 @@ export function registerProjectIpcHandlers(): void {
     }
 
     try {
+      const projectFileAlreadyExists = existsSync(dialogResult.filePath)
+
       return {
         ok: true,
         project: openCurrentProject({
           filePath: dialogResult.filePath,
           name: createInput.name,
+          seedDefaultCategories: !projectFileAlreadyExists,
         }),
       }
     } catch {

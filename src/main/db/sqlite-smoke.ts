@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
+import { defaultCategoryCount, seedDefaultCategories } from './default-categories.js'
 import {
   readProjectDatabaseMigrationState,
   runProjectDatabaseMigrations,
@@ -16,6 +17,7 @@ export type SqliteSmokeResult = {
   readonly coreSchemaTableCount: number
   readonly insertedName: string
   readonly migrationVersion: number
+  readonly seededCategoryCount: number
   readonly repositorySmokePassed: boolean
   readonly sqliteVersion: string
   readonly transactionRollbackPassed: boolean
@@ -157,6 +159,15 @@ const runTransactionRollbackSmokeCheck = (database: DatabaseSync): boolean => {
   return false
 }
 
+const runDefaultCategorySeedSmokeCheck = (database: DatabaseSync): number => {
+  seedDefaultCategories(database)
+  seedDefaultCategories(database)
+
+  const categoriesRepository = createCategoriesRepository(database)
+
+  return categoriesRepository.count()
+}
+
 export function runSqliteSmokeCheck(): SqliteSmokeResult {
   const database = new DatabaseSync(':memory:')
 
@@ -193,6 +204,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
     const coreSchemaRowCount = getCoreSchemaRowCount(database)
     const repositorySmokePassed = runRepositorySmokeCheck(database)
     const transactionRollbackPassed = runTransactionRollbackSmokeCheck(database)
+    const seededCategoryCount = runDefaultCategorySeedSmokeCheck(database)
 
     if (!insertedRow || !versionRow) {
       throw new Error('SQLite smoke check did not return expected rows.')
@@ -207,7 +219,11 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
       throw new Error('SQLite core schema smoke check did not return expected schema.')
     }
 
-    if (!repositorySmokePassed || !transactionRollbackPassed) {
+    if (
+      !repositorySmokePassed ||
+      !transactionRollbackPassed ||
+      seededCategoryCount !== defaultCategoryCount
+    ) {
       throw new Error('SQLite repository smoke check did not return expected results.')
     }
 
@@ -218,6 +234,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
       coreSchemaTableCount: expectedCoreSchemaTables.length,
       insertedName: insertedRow.name,
       migrationVersion: migrationState.currentVersion,
+      seededCategoryCount,
       repositorySmokePassed,
       sqliteVersion: versionRow.sqliteVersion,
       transactionRollbackPassed,

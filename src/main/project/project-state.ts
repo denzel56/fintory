@@ -10,6 +10,7 @@ import {
   closeActiveProjectDatabaseConnection,
   openProjectDatabaseConnection,
 } from '../db/project-database-connection.js'
+import { seedDefaultCategories } from '../db/default-categories.js'
 
 type CurrentProjectRecord = {
   filePath: string
@@ -29,6 +30,7 @@ export function getCurrentProjectState(): CurrentProjectStateDto {
 export function openCurrentProject(input: {
   filePath: string
   name: string
+  seedDefaultCategories?: boolean
 }): CurrentProjectDto {
   const closeResult = closeCurrentProject()
 
@@ -36,7 +38,16 @@ export function openCurrentProject(input: {
     throw new Error('Current project could not be closed before opening another project.')
   }
 
-  openProjectDatabaseConnection(input.filePath)
+  const database = openProjectDatabaseConnection(input.filePath)
+
+  try {
+    if (input.seedDefaultCategories) {
+      seedDefaultCategories(database)
+    }
+  } catch (error) {
+    closeActiveProjectDatabaseConnection()
+    throw error
+  }
 
   const project: CurrentProjectDto = {
     id: randomUUID(),
