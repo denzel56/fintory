@@ -12,6 +12,7 @@ import { runInTransaction } from './transactions.js'
 
 export type SqliteSmokeResult = {
   readonly appliedMigrationCount: number
+  readonly categoryCrudSmokePassed: boolean
   readonly coreSchemaIndexCount: number
   readonly coreSchemaRowCount: number
   readonly coreSchemaTableCount: number
@@ -168,6 +169,70 @@ const runDefaultCategorySeedSmokeCheck = (database: DatabaseSync): number => {
   return categoriesRepository.count()
 }
 
+const runCategoryCrudSmokeCheck = (database: DatabaseSync): boolean => {
+  const categoriesRepository = createCategoriesRepository(database)
+  const timestamp = '2026-01-01T00:00:00.000Z'
+  const createdCategory = categoriesRepository.create({
+    color: '#228be6',
+    createdAt: timestamp,
+    id: 'crud-category',
+    name: 'CRUD category',
+    updatedAt: timestamp,
+  })
+
+  const updatedCategory = categoriesRepository.update({
+    color: '#40c057',
+    id: createdCategory.id,
+    name: 'Updated CRUD category',
+    updatedAt: timestamp,
+  })
+
+  database
+    .prepare(
+      `INSERT INTO transactions (
+        id,
+        transaction_date,
+        description,
+        amount_minor,
+        currency,
+        direction,
+        category_id,
+        source_hash,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      'crud-transaction',
+      '2026-01-01',
+      'CRUD transaction',
+      1000,
+      'USD',
+      'expense',
+      createdCategory.id,
+      'crud-source-hash',
+      timestamp,
+      timestamp,
+    )
+
+  const categoryExistsBeforeDelete = categoriesRepository.existsByName(
+    'Updated CRUD category',
+  )
+  const wasDeleted = categoriesRepository.deleteById(createdCategory.id)
+  const transactionRow = database
+    .prepare('SELECT category_id FROM transactions WHERE id = ?')
+    .get('crud-transaction') as { category_id: string | null } | undefined
+
+  return (
+    createdCategory.name === 'CRUD category' &&
+    updatedCategory?.name === 'Updated CRUD category' &&
+    categoryExistsBeforeDelete &&
+    wasDeleted &&
+    categoriesRepository.findById(createdCategory.id) === null &&
+    transactionRow?.category_id === null
+  )
+}
+
 export function runSqliteSmokeCheck(): SqliteSmokeResult {
   const database = new DatabaseSync(':memory:')
 
@@ -204,6 +269,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
     const coreSchemaRowCount = getCoreSchemaRowCount(database)
     const repositorySmokePassed = runRepositorySmokeCheck(database)
     const transactionRollbackPassed = runTransactionRollbackSmokeCheck(database)
+    const categoryCrudSmokePassed = runCategoryCrudSmokeCheck(database)
     const seededCategoryCount = runDefaultCategorySeedSmokeCheck(database)
 
     if (!insertedRow || !versionRow) {
@@ -222,6 +288,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
     if (
       !repositorySmokePassed ||
       !transactionRollbackPassed ||
+      !categoryCrudSmokePassed ||
       seededCategoryCount !== defaultCategoryCount
     ) {
       throw new Error('SQLite repository smoke check did not return expected results.')
@@ -229,6 +296,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
 
     return {
       appliedMigrationCount: migrationState.appliedMigrationCount,
+      categoryCrudSmokePassed,
       coreSchemaIndexCount: expectedCoreSchemaIndexes.length,
       coreSchemaRowCount,
       coreSchemaTableCount: expectedCoreSchemaTables.length,
