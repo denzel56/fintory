@@ -37,6 +37,10 @@ try {
     throw new Error('SQLite core schema smoke check returned an unexpected schema.')
   }
 
+  if (!result.repositorySmokePassed || !result.transactionRollbackPassed) {
+    throw new Error('SQLite repository smoke check returned an unexpected result.')
+  }
+
   console.log(
     `SQLite smoke check passed with SQLite ${result.sqliteVersion} and migration version ${result.migrationVersion}.`,
   )
