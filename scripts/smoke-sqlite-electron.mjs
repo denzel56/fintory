@@ -41,6 +41,10 @@ try {
     throw new Error('SQLite repository smoke check returned an unexpected result.')
   }
 
+  if (!result.categoryCrudSmokePassed) {
+    throw new Error('SQLite category CRUD smoke check returned an unexpected result.')
+  }
+
   if (result.seededCategoryCount <= 0) {
     throw new Error('SQLite default category seed smoke check returned an unexpected result.')
   }
