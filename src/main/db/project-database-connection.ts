@@ -7,7 +7,7 @@ type ActiveProjectDatabaseConnection = {
 
 let activeProjectDatabaseConnection: ActiveProjectDatabaseConnection | null = null
 
-export function openProjectDatabaseConnection(filePath: string): void {
+export function openProjectDatabaseConnection(filePath: string): DatabaseSync {
   closeActiveProjectDatabaseConnection()
   const database = new DatabaseSync(filePath)
 
@@ -23,6 +23,8 @@ export function openProjectDatabaseConnection(filePath: string): void {
   activeProjectDatabaseConnection = {
     database,
   }
+
+  return database
 }
 
 export function closeActiveProjectDatabaseConnection(): void {
@@ -32,4 +34,8 @@ export function closeActiveProjectDatabaseConnection(): void {
 
   activeProjectDatabaseConnection.database.close()
   activeProjectDatabaseConnection = null
+}
+
+export function getActiveProjectDatabase(): DatabaseSync | null {
+  return activeProjectDatabaseConnection?.database ?? null
 }

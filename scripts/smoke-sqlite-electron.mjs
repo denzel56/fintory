@@ -41,6 +41,10 @@ try {
     throw new Error('SQLite repository smoke check returned an unexpected result.')
   }
 
+  if (result.seededCategoryCount <= 0) {
+    throw new Error('SQLite default category seed smoke check returned an unexpected result.')
+  }
+
   console.log(
     `SQLite smoke check passed with SQLite ${result.sqliteVersion} and migration version ${result.migrationVersion}.`,
   )

@@ -53,6 +53,7 @@ export function registerProjectIpcHandlers(): void {
         project: openCurrentProject({
           filePath: dialogResult.filePath,
           name: createInput.name,
+          seedDefaultCategories: true,
         }),
       }
     } catch {
