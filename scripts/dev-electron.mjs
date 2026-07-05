@@ -23,6 +23,22 @@ const runNpm = (args, options = {}) => {
   return runCommand(npmCommand, args, options)
 }
 
+const stopProcessTree = (childProcess) => {
+  if (!childProcess || childProcess.killed) {
+    return
+  }
+
+  if (process.platform === 'win32') {
+    spawn('taskkill', ['/pid', String(childProcess.pid), '/t', '/f'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+    return
+  }
+
+  childProcess.kill()
+}
+
 const waitForDevServer = () =>
   new Promise((resolve, reject) => {
     const startedAt = Date.now()
@@ -63,10 +79,16 @@ const buildMainProcess = () =>
 
 const viteProcess = runNpm(['run', 'dev'])
 let electronProcess = null
+let isStopping = false
 
 const stopChildProcesses = () => {
-  electronProcess?.kill()
-  viteProcess.kill()
+  if (isStopping) {
+    return
+  }
+
+  isStopping = true
+  stopProcessTree(electronProcess)
+  stopProcessTree(viteProcess)
 }
 
 process.on('SIGINT', () => {
@@ -91,11 +113,11 @@ try {
   })
 
   electronProcess.on('exit', (code) => {
-    viteProcess.kill()
+    stopChildProcesses()
     process.exit(code ?? 0)
   })
 } catch (error) {
-  viteProcess.kill()
+  stopChildProcesses()
   console.error(error)
   process.exit(1)
 }
