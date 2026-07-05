@@ -1,8 +1,13 @@
 import { spawn } from 'node:child_process'
 import http from 'node:http'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const devServerUrl = 'http://127.0.0.1:5173/'
 const npmCliPath = process.env.npm_execpath
+const currentFilePath = fileURLToPath(import.meta.url)
+const projectRoot = path.resolve(path.dirname(currentFilePath), '..')
+const viteCliPath = path.join(projectRoot, 'node_modules', 'vite', 'bin', 'vite.js')
 
 const runCommand = (command, args, options = {}) => {
   const child = spawn(command, args, {
@@ -22,6 +27,9 @@ const runNpm = (args, options = {}) => {
   const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm'
   return runCommand(npmCommand, args, options)
 }
+
+const runVite = () =>
+  runCommand(process.execPath, [viteCliPath, '--host', '127.0.0.1', '--strictPort'])
 
 const stopProcessTree = (childProcess) => {
   if (!childProcess || childProcess.killed) {
@@ -77,7 +85,7 @@ const buildMainProcess = () =>
     })
   })
 
-const viteProcess = runNpm(['run', 'dev'])
+const viteProcess = runVite()
 let electronProcess = null
 let isStopping = false
 
