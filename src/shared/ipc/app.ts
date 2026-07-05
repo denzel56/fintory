@@ -1,4 +1,5 @@
 import type { CategoriesApi } from './categories.js'
+import type { ImportApi } from './import.js'
 import type { ProjectApi } from './project.js'
 
 export const appIpcChannels = {
@@ -10,5 +11,6 @@ export type FintoryApi = {
     getVersion: () => Promise<string>
   }
   categories: CategoriesApi
+  import: ImportApi
   project: ProjectApi
 }
