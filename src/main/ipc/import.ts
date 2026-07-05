@@ -5,9 +5,13 @@ import { BrowserWindow, dialog, ipcMain } from 'electron'
 import type { OpenDialogOptions } from 'electron'
 import { importIpcChannels } from '../../shared/ipc/import.js'
 import type {
+  ImportBatchDto,
+  ListImportBatchesResult,
   SelectCsvFilesResult,
   SelectedCsvFileMetadata,
 } from '../../shared/types/import.js'
+import { getActiveProjectDatabase } from '../db/project-database-connection.js'
+import { createImportBatchesRepository } from '../db/repositories/import-batches-repository.js'
 
 const selectedCsvFilePathsById = new Map<string, string>()
 
@@ -45,10 +49,57 @@ const replaceSelectedCsvFilePaths = (files: readonly SelectedCsvFile[]): void =>
   }
 }
 
+const toImportBatchDto = (batch: {
+  readonly adapterId: string
+  readonly duplicateCount: number
+  readonly failedCount: number
+  readonly id: string
+  readonly importedAt: string
+  readonly insertedCount: number
+  readonly rowCount: number
+  readonly sourceFileName: string
+}): ImportBatchDto => ({
+  adapterId: batch.adapterId,
+  duplicateCount: batch.duplicateCount,
+  failedCount: batch.failedCount,
+  id: batch.id,
+  importedAt: batch.importedAt,
+  insertedCount: batch.insertedCount,
+  rowCount: batch.rowCount,
+  sourceFileName: batch.sourceFileName,
+})
+
 export const getSelectedCsvFilePath = (selectionId: string): string | undefined =>
   selectedCsvFilePathsById.get(selectionId)
 
 export function registerImportIpcHandlers(): void {
+  ipcMain.handle(importIpcChannels.listBatches, (): ListImportBatchesResult => {
+    const database = getActiveProjectDatabase()
+
+    if (!database) {
+      return {
+        ok: false,
+        code: 'project-not-open',
+        message: 'Open or create a project before viewing import history.',
+      }
+    }
+
+    try {
+      const importBatchesRepository = createImportBatchesRepository(database)
+
+      return {
+        ok: true,
+        batches: importBatchesRepository.list().map(toImportBatchDto),
+      }
+    } catch {
+      return {
+        ok: false,
+        code: 'import-batches-list-failed',
+        message: 'Import history could not be loaded right now.',
+      }
+    }
+  })
+
   ipcMain.handle(importIpcChannels.selectCsvFiles, async (event): Promise<SelectCsvFilesResult> => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender)
     const dialogOptions: OpenDialogOptions = {

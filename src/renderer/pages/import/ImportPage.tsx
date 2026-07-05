@@ -1,6 +1,17 @@
-import { Alert, Button, Card, Group, List, Stack, Text, Title } from '@mantine/core'
-import { useState } from 'react'
-import type { SelectedCsvFileMetadata } from '../../../shared/types/import'
+import {
+  Alert,
+  Button,
+  Card,
+  Group,
+  List,
+  Loader,
+  Stack,
+  Table,
+  Text,
+  Title,
+} from '@mantine/core'
+import { useEffect, useState } from 'react'
+import type { ImportBatchDto, SelectedCsvFileMetadata } from '../../../shared/types/import'
 
 type CsvSelectionState =
   | { readonly status: 'idle'; readonly files: readonly SelectedCsvFileMetadata[] }
@@ -16,6 +27,11 @@ type CsvSelectionState =
       readonly message: string
     }
 
+type ImportBatchesLoadState =
+  | { readonly status: 'loading' }
+  | { readonly status: 'loaded'; readonly batches: readonly ImportBatchDto[] }
+  | { readonly status: 'error'; readonly message: string }
+
 const formatFileSize = (sizeBytes: number): string => {
   if (sizeBytes < 1024) {
     return `${sizeBytes} B`
@@ -28,13 +44,71 @@ const formatFileSize = (sizeBytes: number): string => {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+const formatImportDate = (value: string): string => {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleString()
+}
+
+const loadImportBatchesState = async (): Promise<ImportBatchesLoadState> => {
+  if (!window.fintory) {
+    return {
+      status: 'error',
+      message: 'The Electron preload bridge is not available in this runtime.',
+    }
+  }
+
+  try {
+    const result = await window.fintory.import.listBatches()
+
+    if (result.ok) {
+      return { status: 'loaded', batches: result.batches }
+    }
+
+    return { status: 'error', message: result.message }
+  } catch {
+    return {
+      status: 'error',
+      message: 'Import history could not be loaded right now.',
+    }
+  }
+}
+
 export function ImportPage() {
   const [csvSelectionState, setCsvSelectionState] = useState<CsvSelectionState>({
     status: 'idle',
     files: [],
   })
+  const [importBatchesLoadState, setImportBatchesLoadState] =
+    useState<ImportBatchesLoadState>({ status: 'loading' })
   const isSelecting = csvSelectionState.status === 'selecting'
   const selectedFiles = csvSelectionState.files
+  const importBatches =
+    importBatchesLoadState.status === 'loaded' ? importBatchesLoadState.batches : []
+  const isImportHistoryLoading = importBatchesLoadState.status === 'loading'
+
+  const loadImportBatches = async () => {
+    setImportBatchesLoadState({ status: 'loading' })
+    setImportBatchesLoadState(await loadImportBatchesState())
+  }
+
+  useEffect(() => {
+    let isMounted = true
+
+    loadImportBatchesState().then((nextImportBatchesLoadState) => {
+      if (isMounted) {
+        setImportBatchesLoadState(nextImportBatchesLoadState)
+      }
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const handleSelectCsvFiles = async () => {
     if (!window.fintory) {
@@ -90,6 +164,20 @@ export function ImportPage() {
     </List.Item>
   ))
 
+  const importBatchRows = importBatches.map((batch) => (
+    <Table.Tr key={batch.id}>
+      <Table.Td>
+        <Text fw={600}>{batch.sourceFileName}</Text>
+      </Table.Td>
+      <Table.Td>{formatImportDate(batch.importedAt)}</Table.Td>
+      <Table.Td>{batch.adapterId}</Table.Td>
+      <Table.Td>{batch.rowCount}</Table.Td>
+      <Table.Td>{batch.insertedCount}</Table.Td>
+      <Table.Td>{batch.duplicateCount}</Table.Td>
+      <Table.Td>{batch.failedCount}</Table.Td>
+    </Table.Tr>
+  ))
+
   return (
     <Card padding="xl" radius="lg" withBorder>
       <Stack gap="md">
@@ -138,6 +226,72 @@ export function ImportPage() {
             </Stack>
           </Card>
         )}
+
+        <Card padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Group justify="space-between">
+              <Stack gap={4}>
+                <Text fw={700}>Import history</Text>
+                <Text c="dimmed" size="sm">
+                  Review CSV import batches already stored in the active local project.
+                </Text>
+              </Stack>
+              <Button
+                loading={isImportHistoryLoading}
+                variant="light"
+                onClick={() => void loadImportBatches()}
+              >
+                Refresh history
+              </Button>
+            </Group>
+
+            {importBatchesLoadState.status === 'error' ? (
+              <Alert color="yellow" title="Import history unavailable">
+                {importBatchesLoadState.message}
+              </Alert>
+            ) : null}
+
+            {isImportHistoryLoading ? (
+              <Group gap="sm">
+                <Loader size="sm" />
+                <Text c="dimmed" size="sm">
+                  Loading import history...
+                </Text>
+              </Group>
+            ) : null}
+
+            {importBatchesLoadState.status === 'loaded' && importBatches.length === 0 ? (
+              <Card bg="blue-light" padding="md" radius="md" withBorder>
+                <Stack gap={4}>
+                  <Text fw={700}>No import batches yet.</Text>
+                  <Text c="dimmed" size="sm">
+                    Future imports will appear here after CSV parsing and database writes
+                    are implemented.
+                  </Text>
+                </Stack>
+              </Card>
+            ) : null}
+
+            {importBatches.length > 0 ? (
+              <Table.ScrollContainer minWidth={760}>
+                <Table striped withTableBorder>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>File</Table.Th>
+                      <Table.Th>Imported</Table.Th>
+                      <Table.Th>Adapter</Table.Th>
+                      <Table.Th>Rows</Table.Th>
+                      <Table.Th>Inserted</Table.Th>
+                      <Table.Th>Duplicates</Table.Th>
+                      <Table.Th>Failed</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>{importBatchRows}</Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
+            ) : null}
+          </Stack>
+        </Card>
       </Stack>
     </Card>
   )

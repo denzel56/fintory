@@ -5,6 +5,28 @@ export type SelectedCsvFileMetadata = {
   readonly sizeBytes: number
 }
 
+export type ImportBatchDto = {
+  readonly adapterId: string
+  readonly duplicateCount: number
+  readonly failedCount: number
+  readonly id: string
+  readonly importedAt: string
+  readonly insertedCount: number
+  readonly rowCount: number
+  readonly sourceFileName: string
+}
+
+export type ListImportBatchesResult =
+  | {
+      readonly ok: true
+      readonly batches: readonly ImportBatchDto[]
+    }
+  | {
+      readonly ok: false
+      readonly code: 'import-batches-list-failed' | 'project-not-open'
+      readonly message: string
+    }
+
 export type SelectCsvFilesResult =
   | {
       readonly ok: true

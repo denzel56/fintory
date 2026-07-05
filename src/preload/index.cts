@@ -14,6 +14,7 @@ const categoriesIpcChannels = {
 } as const
 
 const importIpcChannels = {
+  listBatches: 'import:listBatches',
   selectCsvFiles: 'import:selectCsvFiles',
 } as const
 
@@ -35,6 +36,7 @@ const fintoryApi: FintoryApi = {
     update: (input) => ipcRenderer.invoke(categoriesIpcChannels.update, input),
   },
   import: {
+    listBatches: () => ipcRenderer.invoke(importIpcChannels.listBatches),
     selectCsvFiles: () => ipcRenderer.invoke(importIpcChannels.selectCsvFiles),
   },
   project: {
