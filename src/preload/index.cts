@@ -1,9 +1,28 @@
-import { contextBridge, ipcRenderer } from 'electron'
-import { appIpcChannels } from '../shared/ipc/app.js'
-import { categoriesIpcChannels } from '../shared/ipc/categories.js'
-import { importIpcChannels } from '../shared/ipc/import.js'
-import { projectIpcChannels } from '../shared/ipc/project.js'
 import type { FintoryApi } from '../shared/ipc/app.js'
+
+const { contextBridge, ipcRenderer } = require('electron') as typeof import('electron')
+
+const appIpcChannels = {
+  getVersion: 'app:getVersion',
+} as const
+
+const categoriesIpcChannels = {
+  create: 'categories:create',
+  delete: 'categories:delete',
+  list: 'categories:list',
+  update: 'categories:update',
+} as const
+
+const importIpcChannels = {
+  selectCsvFiles: 'import:selectCsvFiles',
+} as const
+
+const projectIpcChannels = {
+  close: 'project:close',
+  create: 'project:create',
+  getCurrent: 'project:getCurrent',
+  open: 'project:open',
+} as const
 
 const fintoryApi: FintoryApi = {
   app: {

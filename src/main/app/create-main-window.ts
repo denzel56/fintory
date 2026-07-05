@@ -7,7 +7,7 @@ const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirectory = path.dirname(currentFilePath)
 const projectRoot = path.resolve(currentDirectory, '../../..')
 const rendererBuildPath = path.join(projectRoot, 'dist', 'index.html')
-const preloadPath = path.join(projectRoot, 'dist-electron', 'preload', 'index.js')
+const preloadPath = path.join(projectRoot, 'dist-electron', 'preload', 'index.cjs')
 
 export const createMainWindow = async (): Promise<void> => {
   const devServerUrl = getDevServerUrl()
