@@ -11,9 +11,12 @@ import type {
 
 const selectedCsvFilePathsById = new Map<string, string>()
 
-const getSafeCsvMetadata = async (
-  filePath: string,
-): Promise<SelectedCsvFileMetadata | null> => {
+type SelectedCsvFile = {
+  readonly filePath: string
+  readonly metadata: SelectedCsvFileMetadata
+}
+
+const getSelectedCsvFile = async (filePath: string): Promise<SelectedCsvFile | null> => {
   const extension = extname(filePath).toLowerCase()
 
   if (extension !== '.csv') {
@@ -23,13 +26,22 @@ const getSafeCsvMetadata = async (
   const fileStats = await stat(filePath)
   const selectionId = randomUUID()
 
-  selectedCsvFilePathsById.set(selectionId, filePath)
-
   return {
-    extension,
-    fileName: basename(filePath),
-    selectionId,
-    sizeBytes: fileStats.size,
+    filePath,
+    metadata: {
+      extension,
+      fileName: basename(filePath),
+      selectionId,
+      sizeBytes: fileStats.size,
+    },
+  }
+}
+
+const replaceSelectedCsvFilePaths = (files: readonly SelectedCsvFile[]): void => {
+  selectedCsvFilePathsById.clear()
+
+  for (const file of files) {
+    selectedCsvFilePathsById.set(file.metadata.selectionId, file.filePath)
   }
 }
 
@@ -53,7 +65,7 @@ export function registerImportIpcHandlers(): void {
     }
 
     try {
-      const files = await Promise.all(dialogResult.filePaths.map(getSafeCsvMetadata))
+      const files = await Promise.all(dialogResult.filePaths.map(getSelectedCsvFile))
       const selectedFiles = files.filter((file) => file !== null)
 
       if (selectedFiles.length !== dialogResult.filePaths.length) {
@@ -64,7 +76,13 @@ export function registerImportIpcHandlers(): void {
         }
       }
 
-      return { ok: true, canceled: false, files: selectedFiles }
+      replaceSelectedCsvFilePaths(selectedFiles)
+
+      return {
+        ok: true,
+        canceled: false,
+        files: selectedFiles.map((file) => file.metadata),
+      }
     } catch {
       return {
         ok: false,
