@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { appIpcChannels } from '../shared/ipc/app.js'
 import { categoriesIpcChannels } from '../shared/ipc/categories.js'
+import { importIpcChannels } from '../shared/ipc/import.js'
 import { projectIpcChannels } from '../shared/ipc/project.js'
 import type { FintoryApi } from '../shared/ipc/app.js'
 
@@ -13,6 +14,9 @@ const fintoryApi: FintoryApi = {
     delete: (input) => ipcRenderer.invoke(categoriesIpcChannels.delete, input),
     list: () => ipcRenderer.invoke(categoriesIpcChannels.list),
     update: (input) => ipcRenderer.invoke(categoriesIpcChannels.update, input),
+  },
+  import: {
+    selectCsvFiles: () => ipcRenderer.invoke(importIpcChannels.selectCsvFiles),
   },
   project: {
     close: () => ipcRenderer.invoke(projectIpcChannels.close),
