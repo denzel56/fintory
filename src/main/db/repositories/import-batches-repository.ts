@@ -27,6 +27,7 @@ type ImportBatchRow = {
 export type ImportBatchesRepository = {
   readonly count: () => number
   readonly findById: (id: string) => ImportBatchRecord | null
+  readonly list: () => readonly ImportBatchRecord[]
 }
 
 const mapImportBatchRow = (row: ImportBatchRow): ImportBatchRecord => ({
@@ -58,6 +59,13 @@ export function createImportBatchesRepository(
         | undefined
 
       return row ? mapImportBatchRow(row) : null
+    },
+    list: () => {
+      const rows = database
+        .prepare('SELECT * FROM import_batches ORDER BY imported_at DESC, id ASC')
+        .all() as ImportBatchRow[]
+
+      return rows.map(mapImportBatchRow)
     },
   }
 }
