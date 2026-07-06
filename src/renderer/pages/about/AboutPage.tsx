@@ -1,7 +1,5 @@
-import { Card, Stack, Text } from '@mantine/core'
+import { Card, Stack, Text, Title } from '@mantine/core'
 import { useEffect, useState } from 'react'
-import { ProjectLifecycleCard } from '../../features/project-lifecycle/ProjectLifecycleCard'
-import { PlaceholderPage } from '../../shared/ui/PlaceholderPage'
 
 type VersionState =
   | { status: 'loading' }
@@ -32,6 +30,13 @@ const getVersionText = (versionState: VersionState): string => {
   }
 }
 
+const workflowSteps = [
+  'Create a local project',
+  'Import bank CSV exports',
+  'Review and categorize transactions',
+  'Understand spending history',
+]
+
 export function AboutPage() {
   const [versionState, setVersionState] = useState<VersionState>({ status: 'loading' })
 
@@ -61,23 +66,42 @@ export function AboutPage() {
   const versionText = getVersionText(versionState)
 
   return (
-    <PlaceholderPage
-      description="A future place for project settings, app version details, and local-first privacy notes."
-      emptyDescription="Settings will be added only when project lifecycle features exist."
-      emptyTitle="Settings are not available yet."
-      eyebrow="Settings / About"
-      title="Settings and about placeholder"
-    >
-      <Card bg="blue-light" padding="lg" radius="md" withBorder>
-        <Stack gap={4}>
-          <Text fw={700}>App version</Text>
-          <Text c="dimmed" size="sm">
-            {versionText}
-          </Text>
-        </Stack>
-      </Card>
+    <Card padding="xl" radius="lg" withBorder>
+      <Stack gap="md">
+        <Text c="dimmed" fw={700} size="xs" tt="uppercase">
+          About
+        </Text>
+        <Title order={3}>Fintory local finance archive</Title>
+        <Text c="dimmed">
+          Build a private financial history from bank CSV files. Fintory keeps
+          data on this computer and avoids cloud sync, telemetry, and bank API
+          connections.
+        </Text>
 
-      <ProjectLifecycleCard />
-    </PlaceholderPage>
+        <Card bg="blue-light" padding="lg" radius="md" withBorder>
+          <Stack gap={4}>
+            <Text fw={700}>App version</Text>
+            <Text c="dimmed" size="sm">
+              {versionText}
+            </Text>
+          </Stack>
+        </Card>
+
+        <Card padding="lg" radius="md" withBorder>
+          <Stack gap="md">
+            <Text c="dimmed" fw={700} size="xs" tt="uppercase">
+              Primary workflow
+            </Text>
+            <Stack component="ol" gap="md" m={0} pl="md">
+              {workflowSteps.map((step) => (
+                <Text component="li" fw={600} key={step}>
+                  {step}
+                </Text>
+              ))}
+            </Stack>
+          </Stack>
+        </Card>
+      </Stack>
+    </Card>
   )
 }

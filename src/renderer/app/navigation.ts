@@ -1,6 +1,8 @@
 export type AppPageId =
-  | 'dashboard'
+  | 'overview'
   | 'import'
   | 'transactions'
   | 'categories'
+  | 'project'
+  | 'settings'
   | 'about'

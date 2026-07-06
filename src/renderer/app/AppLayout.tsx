@@ -2,7 +2,6 @@ import {
   AppShell,
   Badge,
   Burger,
-  Card,
   Group,
   NavLink,
   Stack,
@@ -27,14 +26,14 @@ type AppLayoutProps = PropsWithChildren<{
 
 const navigationItems: NavigationItem[] = [
   {
-    id: 'dashboard',
-    label: 'Dashboard',
-    description: 'A quick overview of income, expenses, and trends.',
+    id: 'overview',
+    label: 'Overview',
+    description: 'Future income, expenses, and trend summaries.',
   },
   {
     id: 'import',
-    label: 'CSV Import',
-    description: 'Bring in bank statement exports and avoid duplicates.',
+    label: 'Import',
+    description: 'Select CSV exports and review import history.',
   },
   {
     id: 'transactions',
@@ -44,20 +43,23 @@ const navigationItems: NavigationItem[] = [
   {
     id: 'categories',
     label: 'Categories',
-    description: 'Keep a simple set of editable spending categories.',
+    description: 'Manage editable spending categories.',
+  },
+  {
+    id: 'project',
+    label: 'Project',
+    description: 'Create, open, or close a local project.',
+  },
+  {
+    id: 'settings',
+    label: 'Settings',
+    description: 'Future app and project preferences.',
   },
   {
     id: 'about',
-    label: 'Settings / About',
-    description: 'Review local-first boundaries and future app settings.',
+    label: 'About',
+    description: 'Version, privacy, and workflow notes.',
   },
-]
-
-const workflowSteps = [
-  'Create a local project',
-  'Import bank CSV exports',
-  'Review and categorize transactions',
-  'Understand spending history',
 ]
 
 export function AppLayout({
@@ -105,7 +107,7 @@ export function AppLayout({
               </Title>
             </div>
           </Group>
-          <Badge variant="light">MVP shell</Badge>
+          <Badge variant="light">Local-first MVP</Badge>
         </Group>
       </AppShell.Header>
 
@@ -125,42 +127,7 @@ export function AppLayout({
       </AppShell.Navbar>
 
       <AppShell.Main>
-        <Stack gap="xl">
-          <Card bg="blue-light" padding="xl" radius="lg" withBorder>
-            <Stack gap="sm">
-              <Text c="blue" fw={700} size="xs" tt="uppercase">
-                MVP shell
-              </Text>
-              <Title maw={760} order={2} size="3rem">
-                Build your private financial history from bank CSV files.
-              </Title>
-              <Text c="dimmed" maw={820} size="lg">
-                Fintory will help create a local project, import statement
-                exports, preserve history, and explore spending without cloud
-                sync, telemetry, or bank API connections.
-              </Text>
-            </Stack>
-          </Card>
-
-          <Group align="stretch" grow preventGrowOverflow={false}>
-            {children}
-
-            <Card miw={280} padding="xl" radius="lg" withBorder>
-              <Stack gap="md">
-                <Text c="dimmed" fw={700} size="xs" tt="uppercase">
-                  Primary workflow
-                </Text>
-                <Stack component="ol" gap="md" m={0} pl="md">
-                  {workflowSteps.map((step) => (
-                    <Text component="li" fw={600} key={step}>
-                      {step}
-                    </Text>
-                  ))}
-                </Stack>
-              </Stack>
-            </Card>
-          </Group>
-        </Stack>
+        {children}
       </AppShell.Main>
     </AppShell>
   )
