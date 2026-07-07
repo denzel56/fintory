@@ -13,6 +13,7 @@
     "preview": "vite preview",
     "smoke:csv-adapter": "npm run build:electron && node scripts/smoke-csv-adapter.mjs",
     "smoke:csv-parser": "npm run build:electron && node scripts/smoke-csv-parser.mjs",
+    "smoke:source-hash": "npm run build:electron && node scripts/smoke-source-hash.mjs",
     "smoke:sqlite": "npm run build:electron && node scripts/smoke-sqlite-electron.mjs",
     "start:electron": "npm run build && electron ."
   },

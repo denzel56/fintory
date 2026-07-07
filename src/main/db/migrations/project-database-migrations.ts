@@ -91,6 +91,18 @@ const projectDatabaseMigrations: readonly ProjectDatabaseMigration[] = [
       `)
     },
   },
+  {
+    id: '0003_unique_transaction_source_hash',
+    version: 3,
+    up: (database) => {
+      database.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_source_hash_unique
+          ON transactions(source_hash);
+
+        PRAGMA user_version = 3;
+      `)
+    },
+  },
 ]
 
 const ensureMigrationMetadataTable = (database: DatabaseSync): void => {
