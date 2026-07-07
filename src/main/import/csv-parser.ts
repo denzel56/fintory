@@ -202,10 +202,6 @@ export const parseCsvText = (
   }
 
   const { errors: headerErrors, keys: headerKeys } = getHeaderKeys(headerRecord.fields)
-  const rows = dataRecords.map((record) => ({
-    rowNumber: record.rowNumber,
-    values: mapRowValues(headerKeys, record.fields),
-  }))
   const rowErrors = dataRecords.flatMap((record) => {
     if (record.fields.length === headerRecord.fields.length) {
       return []
@@ -223,6 +219,13 @@ export const parseCsvText = (
       ),
     ]
   })
+  const validDataRecords = dataRecords.filter(
+    (record) => record.fields.length === headerRecord.fields.length,
+  )
+  const rows = validDataRecords.map((record) => ({
+    rowNumber: record.rowNumber,
+    values: mapRowValues(headerKeys, record.fields),
+  }))
 
   return {
     encoding,

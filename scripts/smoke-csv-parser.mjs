@@ -21,7 +21,7 @@ assert.equal(validResult.rows[1]?.values.Description, 'Escaped "quote"')
 const malformedCsv = 'Date,Description,Amount\n2026-07-01,"Unclosed description,-1250\n2026-07-02,Salary,5000,extra\n'
 const malformedResult = parseCsvText(malformedCsv)
 
-assert.equal(malformedResult.rows.length, 1)
+assert.equal(malformedResult.rows.length, 0)
 assert.deepEqual(
   malformedResult.errors.map((error) => error.code),
   ['unclosed-quoted-field', 'column-count-mismatch'],
