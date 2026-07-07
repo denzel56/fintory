@@ -227,7 +227,11 @@ export const genericCsvImportAdapter: CsvImportAdapter = {
 
     const normalizeRow = createGenericRowNormalizer(parseResult.headers)
     const drafts: TransactionDraft[] = []
-    const errors: CsvImportAdapterError[] = []
+    const errors: CsvImportAdapterError[] = parseResult.errors.map((error) => ({
+      code: 'malformed-csv-row',
+      message: error.message,
+      rowNumber: error.rowNumber,
+    }))
 
     for (const row of parseResult.rows) {
       const result = normalizeRow(row)

@@ -5,6 +5,7 @@ export type CsvImportAdapterErrorCode =
   | 'invalid-amount'
   | 'invalid-currency'
   | 'invalid-date'
+  | 'malformed-csv-row'
   | 'missing-required-column'
   | 'missing-required-value'
   | 'unsupported-column-set'

@@ -51,3 +51,16 @@ assert.deepEqual(
   invalidRowsResult.errors.map((error) => error.rowNumber),
   [2, 3, 4],
 )
+
+const malformedParserCsv = 'date,description,amount,currency\n2026-07-01,"Unclosed description,-12.50,USD\n2026-07-02,Salary,5000,EUR\n'
+const malformedParserResult = genericCsvImportAdapter.normalizeRows(parseCsvText(malformedParserCsv))
+
+assert.equal(malformedParserResult.drafts.length, 0)
+assert.deepEqual(
+  malformedParserResult.errors.map((error) => error.code),
+  ['malformed-csv-row', 'malformed-csv-row'],
+)
+assert.deepEqual(
+  malformedParserResult.errors.map((error) => error.rowNumber),
+  [2, 2],
+)
