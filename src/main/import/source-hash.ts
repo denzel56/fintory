@@ -15,7 +15,6 @@ type SourceHashPayload = {
   readonly description: string
   readonly direction: TransactionDraft['direction']
   readonly merchant: string | null
-  readonly rawDescription: string | null
   readonly transactionDate: string
   readonly version: typeof sourceHashVersion
 }
@@ -27,7 +26,6 @@ const getSourceHashPayload = ({ adapterId, draft }: SourceHashInput): SourceHash
   description: draft.description,
   direction: draft.direction,
   merchant: draft.merchant,
-  rawDescription: draft.rawDescription,
   transactionDate: draft.transactionDate,
   version: sourceHashVersion,
 })
@@ -41,7 +39,6 @@ const serializeSourceHashPayload = (payload: SourceHashPayload): string =>
     payload.currency,
     payload.direction,
     payload.description,
-    payload.rawDescription,
     payload.merchant,
   ])
 

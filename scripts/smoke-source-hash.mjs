@@ -18,8 +18,13 @@ const draft = {
 
 const firstHash = createTransactionSourceHash({ adapterId, draft })
 const secondHash = createTransactionSourceHash({ adapterId, draft: { ...draft, rowNumber: 200 } })
+const rawDescriptionChangedHash = createTransactionSourceHash({
+  adapterId,
+  draft: { ...draft, rawDescription: '  Coffee from bank export  ' },
+})
 
 assert.equal(firstHash, secondHash)
+assert.equal(firstHash, rawDescriptionChangedHash)
 assert.match(firstHash, new RegExp(`^${sourceHashVersion}:[a-f0-9]{64}$`))
 
 const changedDrafts = [
@@ -27,7 +32,7 @@ const changedDrafts = [
   { ...draft, amountMinor: 1251 },
   { ...draft, currency: 'EUR' },
   { ...draft, direction: 'income' },
-  { ...draft, description: 'Coffee beans', rawDescription: 'Coffee beans' },
+  { ...draft, description: 'Coffee beans' },
   { ...draft, merchant: 'Coffee Shop' },
 ]
 
