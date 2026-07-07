@@ -2,9 +2,11 @@ import type { CsvParseResult, ParsedCsvRow } from '../csv-parser.js'
 import type { TransactionDraft } from '../transaction-draft.js'
 
 export type CsvImportAdapterErrorCode =
+  | 'ambiguous-required-column'
   | 'invalid-amount'
   | 'invalid-currency'
   | 'invalid-date'
+  | 'malformed-csv-header'
   | 'malformed-csv-row'
   | 'missing-required-column'
   | 'missing-required-value'

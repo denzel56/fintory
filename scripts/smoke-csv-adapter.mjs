@@ -64,3 +64,24 @@ assert.deepEqual(
   malformedParserResult.errors.map((error) => error.rowNumber),
   [2, 2],
 )
+
+const duplicateNormalizedHeaderCsv = 'date,description,amount,currency,Amount\n2026-07-01,Coffee,-12.50,USD,100\n'
+const duplicateNormalizedHeaderResult = genericCsvImportAdapter.normalizeRows(
+  parseCsvText(duplicateNormalizedHeaderCsv),
+)
+
+assert.equal(duplicateNormalizedHeaderResult.drafts.length, 0)
+assert.deepEqual(
+  duplicateNormalizedHeaderResult.errors.map((error) => error.code),
+  ['ambiguous-required-column'],
+)
+assert.equal(duplicateNormalizedHeaderResult.errors[0]?.columnName, 'amount')
+
+const malformedHeaderCsv = 'date,description,amount,currency,currency\n2026-07-01,Coffee,-12.50,USD,EUR\n'
+const malformedHeaderResult = genericCsvImportAdapter.normalizeRows(parseCsvText(malformedHeaderCsv))
+
+assert.equal(malformedHeaderResult.drafts.length, 0)
+assert.deepEqual(
+  malformedHeaderResult.errors.map((error) => error.code),
+  ['malformed-csv-header', 'ambiguous-required-column'],
+)

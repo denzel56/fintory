@@ -1,4 +1,4 @@
-import type { CsvParseResult, ParsedCsvRow } from '../csv-parser.js'
+import type { CsvParseError, CsvParseResult, ParsedCsvRow } from '../csv-parser.js'
 import type { TransactionDirection, TransactionDraft } from '../transaction-draft.js'
 import type {
   CsvImportAdapter,
@@ -24,11 +24,27 @@ const getHeaderLookup = (headers: readonly string[]): HeaderLookup => {
   return lookup
 }
 
-const getMissingRequiredColumnErrors = (headers: readonly string[]): readonly CsvImportAdapterError[] => {
+const getHeaderColumnErrors = (headers: readonly string[]): readonly CsvImportAdapterError[] => {
   const headerLookup = getHeaderLookup(headers)
+  const normalizedHeaderCounts = new Map<string, number>()
 
-  return requiredColumns.flatMap((columnName) => {
+  for (const header of headers) {
+    const normalizedHeader = normalizeColumnName(header)
+    normalizedHeaderCounts.set(normalizedHeader, (normalizedHeaderCounts.get(normalizedHeader) ?? 0) + 1)
+  }
+
+  return requiredColumns.flatMap<CsvImportAdapterError>((columnName) => {
     if (headerLookup.has(columnName)) {
+      if ((normalizedHeaderCounts.get(columnName) ?? 0) > 1) {
+        return [
+          {
+            code: 'ambiguous-required-column',
+            columnName,
+            message: `CSV has more than one ${columnName} column after header normalization.`,
+          } satisfies CsvImportAdapterError,
+        ]
+      }
+
       return []
     }
 
@@ -41,6 +57,12 @@ const getMissingRequiredColumnErrors = (headers: readonly string[]): readonly Cs
     ]
   })
 }
+
+const mapParseError = (error: CsvParseError): CsvImportAdapterError => ({
+  code: error.rowNumber === 1 ? 'malformed-csv-header' : 'malformed-csv-row',
+  message: error.message,
+  rowNumber: error.rowNumber,
+})
 
 const getRequiredValue = (
   row: ParsedCsvRow,
@@ -213,25 +235,23 @@ export const genericCsvImportAdapter: CsvImportAdapter = {
   displayName: 'Generic signed amount CSV',
   id: adapterId,
   requiredColumns,
-  canHandle: (headers) => getMissingRequiredColumnErrors(headers).length === 0,
+  canHandle: (headers) => getHeaderColumnErrors(headers).length === 0,
   normalizeRows: (parseResult: CsvParseResult): CsvImportAdapterResult => {
-    const missingRequiredColumnErrors = getMissingRequiredColumnErrors(parseResult.headers)
+    const parseErrors = parseResult.errors.map(mapParseError)
+    const headerErrors = parseErrors.filter((error) => error.code === 'malformed-csv-header')
+    const headerColumnErrors = getHeaderColumnErrors(parseResult.headers)
 
-    if (missingRequiredColumnErrors.length > 0) {
+    if (headerErrors.length > 0 || headerColumnErrors.length > 0) {
       return {
         adapterId,
         drafts: [],
-        errors: missingRequiredColumnErrors,
+        errors: [...parseErrors, ...headerColumnErrors],
       }
     }
 
     const normalizeRow = createGenericRowNormalizer(parseResult.headers)
     const drafts: TransactionDraft[] = []
-    const errors: CsvImportAdapterError[] = parseResult.errors.map((error) => ({
-      code: 'malformed-csv-row',
-      message: error.message,
-      rowNumber: error.rowNumber,
-    }))
+    const errors: CsvImportAdapterError[] = parseErrors
 
     for (const row of parseResult.rows) {
       const result = normalizeRow(row)
