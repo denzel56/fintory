@@ -219,8 +219,13 @@ export const parseCsvText = (
       ),
     ]
   })
+  const invalidDataRowNumbers = new Set(
+    [...tokenizedCsv.errors, ...rowErrors].map((error) => error.rowNumber),
+  )
   const validDataRecords = dataRecords.filter(
-    (record) => record.fields.length === headerRecord.fields.length,
+    (record) =>
+      record.fields.length === headerRecord.fields.length &&
+      !invalidDataRowNumbers.has(record.rowNumber),
   )
   const rows = validDataRecords.map((record) => ({
     rowNumber: record.rowNumber,

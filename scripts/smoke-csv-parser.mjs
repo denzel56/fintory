@@ -28,3 +28,12 @@ assert.deepEqual(
 )
 assert.equal(malformedResult.errors[0]?.rowNumber, 2)
 assert.equal(malformedResult.errors[1]?.rowNumber, 2)
+
+const singleColumnMalformedCsv = 'Description\n"Unclosed description'
+const singleColumnMalformedResult = parseCsvText(singleColumnMalformedCsv)
+
+assert.equal(singleColumnMalformedResult.rows.length, 0)
+assert.deepEqual(
+  singleColumnMalformedResult.errors.map((error) => error.code),
+  ['unclosed-quoted-field'],
+)
