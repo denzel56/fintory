@@ -5,13 +5,18 @@ import {
   Group,
   List,
   Loader,
+  SimpleGrid,
   Stack,
   Table,
   Text,
   Title,
 } from '@mantine/core'
 import { useEffect, useState } from 'react'
-import type { ImportBatchDto, SelectedCsvFileMetadata } from '../../../shared/types/import'
+import type {
+  ImportBatchDto,
+  ImportCsvFilesResult,
+  SelectedCsvFileMetadata,
+} from '../../../shared/types/import'
 
 type CsvSelectionState =
   | { readonly status: 'idle'; readonly files: readonly SelectedCsvFileMetadata[] }
@@ -30,6 +35,14 @@ type CsvSelectionState =
 type ImportBatchesLoadState =
   | { readonly status: 'loading' }
   | { readonly status: 'loaded'; readonly batches: readonly ImportBatchDto[] }
+  | { readonly status: 'error'; readonly message: string }
+
+type ImportSuccessResult = Extract<ImportCsvFilesResult, { readonly ok: true }>
+
+type CsvImportState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'importing' }
+  | { readonly status: 'success'; readonly result: ImportSuccessResult }
   | { readonly status: 'error'; readonly message: string }
 
 const formatFileSize = (sizeBytes: number): string => {
@@ -85,11 +98,14 @@ export function ImportPage() {
   })
   const [importBatchesLoadState, setImportBatchesLoadState] =
     useState<ImportBatchesLoadState>({ status: 'loading' })
+  const [csvImportState, setCsvImportState] = useState<CsvImportState>({ status: 'idle' })
   const isSelecting = csvSelectionState.status === 'selecting'
   const selectedFiles = csvSelectionState.files
   const importBatches =
     importBatchesLoadState.status === 'loaded' ? importBatchesLoadState.batches : []
   const isImportHistoryLoading = importBatchesLoadState.status === 'loading'
+  const isImporting = csvImportState.status === 'importing'
+  const canImportSelectedFiles = selectedFiles.length > 0 && !isSelecting && !isImporting
 
   const loadImportBatches = async () => {
     setImportBatchesLoadState({ status: 'loading' })
@@ -143,12 +159,52 @@ export function ImportPage() {
         return
       }
 
+      setCsvImportState({ status: 'idle' })
       setCsvSelectionState({ status: 'idle', files: result.files })
     } catch {
       setCsvSelectionState({
         status: 'error',
         files: selectedFiles,
         message: 'CSV files could not be selected right now.',
+      })
+    }
+  }
+
+  const handleImportCsvFiles = async () => {
+    if (!window.fintory) {
+      setCsvImportState({
+        status: 'error',
+        message: 'The Electron preload bridge is not available in this runtime.',
+      })
+      return
+    }
+
+    if (selectedFiles.length === 0) {
+      setCsvImportState({
+        status: 'error',
+        message: 'Select one or more CSV files before importing.',
+      })
+      return
+    }
+
+    setCsvImportState({ status: 'importing' })
+
+    try {
+      const result = await window.fintory.import.importCsvFiles({
+        selectionIds: selectedFiles.map((file) => file.selectionId),
+      })
+
+      if (!result.ok) {
+        setCsvImportState({ status: 'error', message: result.message })
+        return
+      }
+
+      setCsvImportState({ status: 'success', result })
+      await loadImportBatches()
+    } catch {
+      setCsvImportState({
+        status: 'error',
+        message: 'CSV files could not be imported right now.',
       })
     }
   }
@@ -177,6 +233,41 @@ export function ImportPage() {
       <Table.Td>{batch.failedCount}</Table.Td>
     </Table.Tr>
   ))
+  const importResultFileRows =
+    csvImportState.status === 'success'
+      ? csvImportState.result.files.map((file, index) => (
+          <Table.Tr key={`${file.fileName}-${file.adapterId}-${index}`}>
+            <Table.Td>
+              <Text fw={600}>{file.fileName}</Text>
+            </Table.Td>
+            <Table.Td>{file.adapterId}</Table.Td>
+            <Table.Td>{file.rowCount}</Table.Td>
+            <Table.Td>{file.insertedCount}</Table.Td>
+            <Table.Td>{file.duplicateCount}</Table.Td>
+            <Table.Td>{file.failedCount}</Table.Td>
+          </Table.Tr>
+        ))
+      : []
+  const importResult = csvImportState.status === 'success' ? csvImportState.result : null
+  const hasImportFailures = (importResult?.failedCount ?? 0) > 0
+  const hasImportedTransactions = (importResult?.insertedCount ?? 0) > 0
+  const isUnsupportedCsvResult =
+    importResult?.files.some((file) => file.adapterId === 'unsupported-csv-v1') ?? false
+  const importResultTitle = !importResult
+    ? ''
+    : hasImportedTransactions
+      ? hasImportFailures
+        ? 'Import finished with warnings'
+        : 'Import complete'
+      : 'No transactions imported'
+  const importResultDescription = !importResult
+    ? ''
+    : isUnsupportedCsvResult
+      ? 'This CSV format is not supported yet. Check that the file uses columns: date, description, amount, currency.'
+      : hasImportedTransactions
+        ? 'Review safe import totals below. Duplicate transactions were skipped.'
+        : 'No transactions were written to the project. Review failed row counts before trying again.'
+  const importResultAlertColor = hasImportedTransactions && !hasImportFailures ? 'green' : 'yellow'
 
   return (
     <Card padding="xl" radius="lg" withBorder>
@@ -188,14 +279,14 @@ export function ImportPage() {
             </Text>
             <Title order={3}>Select CSV files</Title>
           </Stack>
-          <Button loading={isSelecting} onClick={handleSelectCsvFiles}>
+          <Button loading={isSelecting} disabled={isImporting} onClick={handleSelectCsvFiles}>
             Select CSV files
           </Button>
         </Group>
 
         <Text c="dimmed">
-          Choose one or more local bank CSV exports. Fintory only stores safe file
-          metadata in this step; parsing and importing will be added later.
+          Choose one or more local bank CSV exports. Fintory imports them locally and
+          shows only safe summary details in the renderer.
         </Text>
 
         {csvSelectionState.status === 'error' ? (
@@ -211,7 +302,22 @@ export function ImportPage() {
         {selectedFiles.length > 0 ? (
           <Card bg="blue-light" padding="lg" radius="md" withBorder>
             <Stack gap="sm">
-              <Text fw={700}>Selected files ({selectedFiles.length})</Text>
+              <Group align="flex-start" justify="space-between">
+                <Stack gap={4}>
+                  <Text fw={700}>Selected files ({selectedFiles.length})</Text>
+                  <Text c="dimmed" size="sm">
+                    Importing reads file contents in the Electron main process and stores
+                    normalized transactions in the active local project.
+                  </Text>
+                </Stack>
+                <Button
+                  disabled={!canImportSelectedFiles}
+                  loading={isImporting}
+                  onClick={() => void handleImportCsvFiles()}
+                >
+                  Import selected files
+                </Button>
+              </Group>
               <List spacing="xs">{selectedFileItems}</List>
             </Stack>
           </Card>
@@ -220,12 +326,89 @@ export function ImportPage() {
             <Stack gap={4}>
               <Text fw={700}>No CSV files selected.</Text>
               <Text c="dimmed" size="sm">
-                Select files to prepare for a future import review. No file contents
-                are read yet.
+                Select files to import transactions into the active local project.
               </Text>
             </Stack>
           </Card>
         )}
+
+        {csvImportState.status === 'error' ? (
+          <Alert color="yellow" title="CSV import unavailable">
+            {csvImportState.message}
+          </Alert>
+        ) : null}
+
+        {csvImportState.status === 'importing' ? (
+          <Alert title="Importing CSV files">
+            <Group gap="sm">
+              <Loader size="sm" />
+              <Text size="sm">
+                Parsing selected files and writing transactions to the active local project...
+              </Text>
+            </Group>
+          </Alert>
+        ) : null}
+
+        {importResult ? (
+          <Card padding="lg" radius="md" withBorder>
+            <Stack gap="md">
+              <Alert color={importResultAlertColor} title={importResultTitle}>
+                {importResultDescription}
+              </Alert>
+
+              <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
+                <Card bg="green-light" padding="md" radius="md" withBorder>
+                  <Text c="dimmed" size="xs" tt="uppercase">
+                    Inserted
+                  </Text>
+                  <Text fw={700} size="xl">
+                    {importResult.insertedCount}
+                  </Text>
+                </Card>
+                <Card bg="blue-light" padding="md" radius="md" withBorder>
+                  <Text c="dimmed" size="xs" tt="uppercase">
+                    Duplicates
+                  </Text>
+                  <Text fw={700} size="xl">
+                    {importResult.duplicateCount}
+                  </Text>
+                </Card>
+                <Card bg="yellow-light" padding="md" radius="md" withBorder>
+                  <Text c="dimmed" size="xs" tt="uppercase">
+                    Failed
+                  </Text>
+                  <Text fw={700} size="xl">
+                    {importResult.failedCount}
+                  </Text>
+                </Card>
+                <Card bg="gray-light" padding="md" radius="md" withBorder>
+                  <Text c="dimmed" size="xs" tt="uppercase">
+                    Rows
+                  </Text>
+                  <Text fw={700} size="xl">
+                    {importResult.rowCount}
+                  </Text>
+                </Card>
+              </SimpleGrid>
+
+              <Table.ScrollContainer minWidth={760}>
+                <Table striped withTableBorder>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>File</Table.Th>
+                      <Table.Th>Adapter</Table.Th>
+                      <Table.Th>Rows</Table.Th>
+                      <Table.Th>Inserted</Table.Th>
+                      <Table.Th>Duplicates</Table.Th>
+                      <Table.Th>Failed</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>{importResultFileRows}</Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
+            </Stack>
+          </Card>
+        ) : null}
 
         <Card padding="lg" radius="md" withBorder>
           <Stack gap="md">
@@ -265,8 +448,8 @@ export function ImportPage() {
                 <Stack gap={4}>
                   <Text fw={700}>No import batches yet.</Text>
                   <Text c="dimmed" size="sm">
-                    Future imports will appear here after CSV parsing and database writes
-                    are implemented.
+                    Imported CSV files will appear here after they are written to the
+                    active local project.
                   </Text>
                 </Stack>
               </Card>
