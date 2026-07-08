@@ -16,6 +16,22 @@ export type TransactionRecord = {
   readonly updatedAt: string
 }
 
+export type CreateTransactionInput = {
+  readonly amountMinor: number
+  readonly categoryId: string | null
+  readonly createdAt: string
+  readonly currency: string
+  readonly description: string
+  readonly direction: 'expense' | 'income'
+  readonly id: string
+  readonly importBatchId: string | null
+  readonly merchant: string | null
+  readonly rawDescription: string | null
+  readonly sourceHash: string
+  readonly transactionDate: string
+  readonly updatedAt: string
+}
+
 type TransactionRow = {
   readonly amount_minor: number
   readonly category_id: string | null
@@ -35,6 +51,7 @@ type TransactionRow = {
 export type TransactionsRepository = {
   readonly count: () => number
   readonly findById: (id: string) => TransactionRecord | null
+  readonly insertIfSourceHashIsNew: (input: CreateTransactionInput) => boolean
 }
 
 const mapTransactionRow = (row: TransactionRow): TransactionRecord => ({
@@ -68,6 +85,44 @@ export function createTransactionsRepository(database: DatabaseSync): Transactio
         | undefined
 
       return row ? mapTransactionRow(row) : null
+    },
+    insertIfSourceHashIsNew: (input) => {
+      const result = database
+        .prepare(
+          `INSERT INTO transactions (
+            id,
+            transaction_date,
+            description,
+            merchant,
+            amount_minor,
+            currency,
+            direction,
+            category_id,
+            source_hash,
+            import_batch_id,
+            raw_description,
+            created_at,
+            updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(source_hash) DO NOTHING`,
+        )
+        .run(
+          input.id,
+          input.transactionDate,
+          input.description,
+          input.merchant,
+          input.amountMinor,
+          input.currency,
+          input.direction,
+          input.categoryId,
+          input.sourceHash,
+          input.importBatchId,
+          input.rawDescription,
+          input.createdAt,
+          input.updatedAt,
+        )
+
+      return result.changes > 0
     },
   }
 }

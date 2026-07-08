@@ -12,6 +12,26 @@ export type ImportBatchRecord = {
   readonly sourceFileName: string
 }
 
+export type CreateImportBatchInput = {
+  readonly adapterId: string
+  readonly duplicateCount: number
+  readonly failedCount: number
+  readonly id: string
+  readonly importedAt: string
+  readonly insertedCount: number
+  readonly rowCount: number
+  readonly sourceFileHash: string
+  readonly sourceFileName: string
+}
+
+export type UpdateImportBatchCountsInput = {
+  readonly duplicateCount: number
+  readonly failedCount: number
+  readonly id: string
+  readonly insertedCount: number
+  readonly rowCount: number
+}
+
 type ImportBatchRow = {
   readonly adapter_id: string
   readonly duplicate_count: number
@@ -27,7 +47,9 @@ type ImportBatchRow = {
 export type ImportBatchesRepository = {
   readonly count: () => number
   readonly findById: (id: string) => ImportBatchRecord | null
+  readonly insert: (input: CreateImportBatchInput) => void
   readonly list: () => readonly ImportBatchRecord[]
+  readonly updateCounts: (input: UpdateImportBatchCountsInput) => void
 }
 
 const mapImportBatchRow = (row: ImportBatchRow): ImportBatchRecord => ({
@@ -60,12 +82,54 @@ export function createImportBatchesRepository(
 
       return row ? mapImportBatchRow(row) : null
     },
+    insert: (input) => {
+      database
+        .prepare(
+          `INSERT INTO import_batches (
+            id,
+            source_file_name,
+            source_file_hash,
+            adapter_id,
+            imported_at,
+            row_count,
+            inserted_count,
+            duplicate_count,
+            failed_count
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          input.id,
+          input.sourceFileName,
+          input.sourceFileHash,
+          input.adapterId,
+          input.importedAt,
+          input.rowCount,
+          input.insertedCount,
+          input.duplicateCount,
+          input.failedCount,
+        )
+    },
     list: () => {
       const rows = database
         .prepare('SELECT * FROM import_batches ORDER BY imported_at DESC, id ASC')
         .all() as ImportBatchRow[]
 
       return rows.map(mapImportBatchRow)
+    },
+    updateCounts: (input) => {
+      database
+        .prepare(
+          `UPDATE import_batches
+          SET row_count = ?, inserted_count = ?, duplicate_count = ?, failed_count = ?
+          WHERE id = ?`,
+        )
+        .run(
+          input.rowCount,
+          input.insertedCount,
+          input.duplicateCount,
+          input.failedCount,
+          input.id,
+        )
     },
   }
 }

@@ -16,6 +16,38 @@ export type ImportBatchDto = {
   readonly sourceFileName: string
 }
 
+export type ImportCsvFilesInput = {
+  readonly selectionIds: readonly string[]
+}
+
+export type ImportCsvFileSummaryDto = {
+  readonly adapterId: string
+  readonly duplicateCount: number
+  readonly failedCount: number
+  readonly fileName: string
+  readonly insertedCount: number
+  readonly rowCount: number
+}
+
+export type ImportCsvFilesResult =
+  | {
+      readonly ok: true
+      readonly duplicateCount: number
+      readonly failedCount: number
+      readonly files: readonly ImportCsvFileSummaryDto[]
+      readonly insertedCount: number
+      readonly rowCount: number
+    }
+  | {
+      readonly ok: false
+      readonly code:
+        | 'csv-import-failed'
+        | 'invalid-csv-import-input'
+        | 'project-not-open'
+        | 'selected-csv-file-not-found'
+      readonly message: string
+    }
+
 export type ListImportBatchesResult =
   | {
       readonly ok: true
