@@ -1,0 +1,62 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
+import { runProjectDatabaseMigrations } from '../db/migrations/project-database-migrations.js'
+import { createImportBatchesRepository } from '../db/repositories/import-batches-repository.js'
+import { createTransactionsRepository } from '../db/repositories/transactions-repository.js'
+import { importCsvFiles } from './csv-import-service.js'
+
+export type CsvImportSmokeResult = {
+  readonly importBatchCount: number
+  readonly firstImportDuplicateCount: number
+  readonly firstImportFailedCount: number
+  readonly firstImportInsertedCount: number
+  readonly secondImportDuplicateCount: number
+  readonly secondImportFailedCount: number
+  readonly secondImportInsertedCount: number
+  readonly transactionCount: number
+}
+
+export const runCsvImportSmokeCheck = async (): Promise<CsvImportSmokeResult> => {
+  const tempDirectory = await mkdtemp(join(tmpdir(), 'fintory-csv-import-smoke-'))
+  const csvFilePath = join(tempDirectory, 'sample.csv')
+  const database = new DatabaseSync(':memory:')
+
+  try {
+    await writeFile(
+      csvFilePath,
+      [
+        'date,description,amount,currency',
+        '2026-07-01,Coffee,-12.50,USD',
+        '2026-07-01,Coffee,-12.50,USD',
+        '2026-07-02,Invalid amount,not-a-number,USD',
+      ].join('\n'),
+      { encoding: 'utf8' },
+    )
+
+    database.exec('PRAGMA foreign_keys = ON')
+    runProjectDatabaseMigrations(database)
+
+    const firstImport = await importCsvFiles({ database, files: [{ filePath: csvFilePath }] })
+    const secondImport = await importCsvFiles({ database, files: [{ filePath: csvFilePath }] })
+
+    if (!firstImport.ok || !secondImport.ok) {
+      throw new Error('CSV import smoke check could not import sample CSV.')
+    }
+
+    return {
+      firstImportDuplicateCount: firstImport.duplicateCount,
+      firstImportFailedCount: firstImport.failedCount,
+      firstImportInsertedCount: firstImport.insertedCount,
+      importBatchCount: createImportBatchesRepository(database).count(),
+      secondImportDuplicateCount: secondImport.duplicateCount,
+      secondImportFailedCount: secondImport.failedCount,
+      secondImportInsertedCount: secondImport.insertedCount,
+      transactionCount: createTransactionsRepository(database).count(),
+    }
+  } finally {
+    database.close()
+    await rm(tempDirectory, { force: true, recursive: true })
+  }
+}
