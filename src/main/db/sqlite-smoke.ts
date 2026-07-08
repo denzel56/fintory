@@ -22,6 +22,7 @@ export type SqliteSmokeResult = {
   readonly repositorySmokePassed: boolean
   readonly sqliteVersion: string
   readonly transactionRollbackPassed: boolean
+  readonly transactionSourceHashUniquePassed: boolean
 }
 
 const expectedCoreSchemaTables = [
@@ -37,6 +38,7 @@ const expectedCoreSchemaIndexes = [
   'idx_transactions_direction',
   'idx_transactions_import_batch_id',
   'idx_transactions_source_hash',
+  'idx_transactions_source_hash_unique',
   'idx_transactions_transaction_date',
 ] as const
 
@@ -233,6 +235,53 @@ const runCategoryCrudSmokeCheck = (database: DatabaseSync): boolean => {
   )
 }
 
+const runTransactionSourceHashUniqueSmokeCheck = (database: DatabaseSync): boolean => {
+  const timestamp = '2026-01-01T00:00:00.000Z'
+  const insertTransaction = database.prepare(
+    `INSERT INTO transactions (
+      id,
+      transaction_date,
+      description,
+      amount_minor,
+      currency,
+      direction,
+      source_hash,
+      created_at,
+      updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+
+  insertTransaction.run(
+    'unique-source-hash-transaction-1',
+    '2026-01-02',
+    'Unique source hash transaction 1',
+    1000,
+    'USD',
+    'expense',
+    'unique-source-hash-smoke',
+    timestamp,
+    timestamp,
+  )
+
+  try {
+    insertTransaction.run(
+      'unique-source-hash-transaction-2',
+      '2026-01-03',
+      'Unique source hash transaction 2',
+      2000,
+      'USD',
+      'expense',
+      'unique-source-hash-smoke',
+      timestamp,
+      timestamp,
+    )
+  } catch {
+    return true
+  }
+
+  return false
+}
+
 export function runSqliteSmokeCheck(): SqliteSmokeResult {
   const database = new DatabaseSync(':memory:')
 
@@ -270,6 +319,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
     const repositorySmokePassed = runRepositorySmokeCheck(database)
     const transactionRollbackPassed = runTransactionRollbackSmokeCheck(database)
     const categoryCrudSmokePassed = runCategoryCrudSmokeCheck(database)
+    const transactionSourceHashUniquePassed = runTransactionSourceHashUniqueSmokeCheck(database)
     const seededCategoryCount = runDefaultCategorySeedSmokeCheck(database)
 
     if (!insertedRow || !versionRow) {
@@ -289,6 +339,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
       !repositorySmokePassed ||
       !transactionRollbackPassed ||
       !categoryCrudSmokePassed ||
+      !transactionSourceHashUniquePassed ||
       seededCategoryCount !== defaultCategoryCount
     ) {
       throw new Error('SQLite repository smoke check did not return expected results.')
@@ -306,6 +357,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
       repositorySmokePassed,
       sqliteVersion: versionRow.sqliteVersion,
       transactionRollbackPassed,
+      transactionSourceHashUniquePassed,
     }
   } finally {
     database.close()
