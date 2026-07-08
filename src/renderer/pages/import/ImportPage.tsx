@@ -240,6 +240,7 @@ export function ImportPage() {
             <Table.Td>
               <Text fw={600}>{file.fileName}</Text>
             </Table.Td>
+            <Table.Td>{file.adapterId}</Table.Td>
             <Table.Td>{file.rowCount}</Table.Td>
             <Table.Td>{file.insertedCount}</Table.Td>
             <Table.Td>{file.duplicateCount}</Table.Td>
@@ -247,6 +248,26 @@ export function ImportPage() {
           </Table.Tr>
         ))
       : []
+  const importResult = csvImportState.status === 'success' ? csvImportState.result : null
+  const hasImportFailures = (importResult?.failedCount ?? 0) > 0
+  const hasImportedTransactions = (importResult?.insertedCount ?? 0) > 0
+  const isUnsupportedCsvResult =
+    importResult?.files.some((file) => file.adapterId === 'unsupported-csv-v1') ?? false
+  const importResultTitle = !importResult
+    ? ''
+    : hasImportedTransactions
+      ? hasImportFailures
+        ? 'Import finished with warnings'
+        : 'Import complete'
+      : 'No transactions imported'
+  const importResultDescription = !importResult
+    ? ''
+    : isUnsupportedCsvResult
+      ? 'This CSV format is not supported yet. Check that the file uses columns: date, description, amount, currency.'
+      : hasImportedTransactions
+        ? 'Review safe import totals below. Duplicate transactions were skipped.'
+        : 'No transactions were written to the project. Review failed row counts before trying again.'
+  const importResultAlertColor = hasImportedTransactions && !hasImportFailures ? 'green' : 'yellow'
 
   return (
     <Card padding="xl" radius="lg" withBorder>
@@ -328,15 +349,12 @@ export function ImportPage() {
           </Alert>
         ) : null}
 
-        {csvImportState.status === 'success' ? (
+        {importResult ? (
           <Card padding="lg" radius="md" withBorder>
             <Stack gap="md">
-              <Stack gap={4}>
-                <Text fw={700}>Import complete</Text>
-                <Text c="dimmed" size="sm">
-                  Review safe import totals below. Duplicate transactions were skipped.
-                </Text>
-              </Stack>
+              <Alert color={importResultAlertColor} title={importResultTitle}>
+                {importResultDescription}
+              </Alert>
 
               <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
                 <Card bg="green-light" padding="md" radius="md" withBorder>
@@ -344,7 +362,7 @@ export function ImportPage() {
                     Inserted
                   </Text>
                   <Text fw={700} size="xl">
-                    {csvImportState.result.insertedCount}
+                    {importResult.insertedCount}
                   </Text>
                 </Card>
                 <Card bg="blue-light" padding="md" radius="md" withBorder>
@@ -352,7 +370,7 @@ export function ImportPage() {
                     Duplicates
                   </Text>
                   <Text fw={700} size="xl">
-                    {csvImportState.result.duplicateCount}
+                    {importResult.duplicateCount}
                   </Text>
                 </Card>
                 <Card bg="yellow-light" padding="md" radius="md" withBorder>
@@ -360,7 +378,7 @@ export function ImportPage() {
                     Failed
                   </Text>
                   <Text fw={700} size="xl">
-                    {csvImportState.result.failedCount}
+                    {importResult.failedCount}
                   </Text>
                 </Card>
                 <Card bg="gray-light" padding="md" radius="md" withBorder>
@@ -368,16 +386,17 @@ export function ImportPage() {
                     Rows
                   </Text>
                   <Text fw={700} size="xl">
-                    {csvImportState.result.rowCount}
+                    {importResult.rowCount}
                   </Text>
                 </Card>
               </SimpleGrid>
 
-              <Table.ScrollContainer minWidth={620}>
+              <Table.ScrollContainer minWidth={760}>
                 <Table striped withTableBorder>
                   <Table.Thead>
                     <Table.Tr>
                       <Table.Th>File</Table.Th>
+                      <Table.Th>Adapter</Table.Th>
                       <Table.Th>Rows</Table.Th>
                       <Table.Th>Inserted</Table.Th>
                       <Table.Th>Duplicates</Table.Th>
