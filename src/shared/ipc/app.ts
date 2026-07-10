@@ -1,6 +1,7 @@
 import type { CategoriesApi } from './categories.js'
 import type { ImportApi } from './import.js'
 import type { ProjectApi } from './project.js'
+import type { TransactionsApi } from './transactions.js'
 
 export const appIpcChannels = {
   getVersion: 'app:getVersion',
@@ -13,4 +14,5 @@ export type FintoryApi = {
   categories: CategoriesApi
   import: ImportApi
   project: ProjectApi
+  transactions: TransactionsApi
 }
