@@ -2,14 +2,18 @@ import { createHash, randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
-import type { ImportCsvFileSummaryDto, ImportCsvFilesResult } from '../../shared/types/import.js'
+import type {
+  ImportCsvFileSummaryDto,
+  ImportCsvFilesResult,
+  ImportDiagnosticDto,
+} from '../../shared/types/import.js'
 import { createImportBatchesRepository } from '../db/repositories/import-batches-repository.js'
 import { createTransactionsRepository } from '../db/repositories/transactions-repository.js'
 import { runInTransaction } from '../db/transactions.js'
 import { parseCsvText } from './csv-parser.js'
 import { createTransactionSourceHashes } from './source-hash.js'
 import { genericCsvImportAdapter } from './adapters/generic-csv-import-adapter.js'
-import type { CsvImportAdapter } from './adapters/csv-import-adapter.js'
+import type { CsvImportAdapter, CsvImportAdapterError } from './adapters/csv-import-adapter.js'
 
 export type CsvImportFileInput = {
   readonly filePath: string
@@ -49,6 +53,42 @@ const getFailedRowCount = (errors: readonly { readonly rowNumber?: number }[]): 
 const getImportAdapter = (headers: readonly string[]): CsvImportAdapter | null =>
   csvImportAdapters.find((adapter) => adapter.canHandle(headers)) ?? null
 
+const diagnosticRowNumberLimit = 10
+
+const getDiagnosticKey = (error: CsvImportAdapterError): string => {
+  return `${error.code}:${error.columnName ?? ''}:${error.message}`
+}
+
+const toImportDiagnostics = (
+  errors: readonly CsvImportAdapterError[],
+): readonly ImportDiagnosticDto[] => {
+  const diagnosticsByKey = new Map<string, ImportDiagnosticDto>()
+
+  for (const error of errors) {
+    const key = getDiagnosticKey(error)
+    const existingDiagnostic = diagnosticsByKey.get(key)
+    const rowNumbers =
+      typeof error.rowNumber === 'number'
+        ? [
+            ...new Set([
+              ...(existingDiagnostic?.rowNumbers ?? []),
+              error.rowNumber,
+            ]),
+          ].slice(0, diagnosticRowNumberLimit)
+        : (existingDiagnostic?.rowNumbers ?? [])
+
+    diagnosticsByKey.set(key, {
+      code: error.code,
+      columnName: error.columnName,
+      count: (existingDiagnostic?.count ?? 0) + 1,
+      message: error.message,
+      rowNumbers,
+    })
+  }
+
+  return [...diagnosticsByKey.values()]
+}
+
 const toTotalSummary = (
   files: readonly ImportCsvFileSummaryDto[],
 ): Omit<Extract<ImportCsvFilesResult, { ok: true }>, 'ok' | 'files'> => ({
@@ -61,6 +101,7 @@ const toTotalSummary = (
 const createFailedBatch = (input: {
   readonly adapterId: string
   readonly database: DatabaseSync
+  readonly diagnostics: readonly ImportDiagnosticDto[]
   readonly failedCount: number
   readonly fileName: string
   readonly rowCount: number
@@ -83,6 +124,7 @@ const createFailedBatch = (input: {
 
   return {
     adapterId: input.adapterId,
+    diagnostics: input.diagnostics,
     duplicateCount: 0,
     failedCount: input.failedCount,
     fileName: input.fileName,
@@ -108,10 +150,25 @@ const importCsvFile = async (
         1,
         parseResult.rows.length + getFailedRowCount(parseResult.errors),
       )
+      const diagnostics: readonly ImportDiagnosticDto[] = [
+        {
+          code: 'unsupported-csv-format',
+          count: 1,
+          message:
+            'CSV format is not supported yet. Expected columns include date, description, amount, and currency.',
+          rowNumbers: [],
+        },
+        ...toImportDiagnostics(parseResult.errors.map((error) => ({
+          code: error.rowNumber === 1 ? 'malformed-csv-header' : 'malformed-csv-row',
+          message: error.message,
+          rowNumber: error.rowNumber,
+        }))),
+      ]
 
       return createFailedBatch({
         adapterId: unsupportedAdapterId,
         database,
+        diagnostics,
         failedCount,
         fileName,
         rowCount: failedCount,
@@ -121,6 +178,7 @@ const importCsvFile = async (
 
     const adapterResult = adapter.normalizeRows(parseResult)
     const failedCount = getFailedRowCount(adapterResult.errors)
+    const diagnostics = toImportDiagnostics(adapterResult.errors)
     const rowCount = getImportRowCount({
       draftCount: adapterResult.drafts.length,
       failedCount,
@@ -130,6 +188,7 @@ const importCsvFile = async (
       return createFailedBatch({
         adapterId: adapter.id,
         database,
+        diagnostics,
         failedCount,
         fileName,
         rowCount,
@@ -189,6 +248,7 @@ const importCsvFile = async (
 
     return {
       adapterId: adapter.id,
+      diagnostics,
       duplicateCount,
       failedCount,
       fileName,

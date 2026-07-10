@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react'
 import type {
   ImportBatchDto,
   ImportCsvFilesResult,
+  ImportDiagnosticDto,
   SelectedCsvFileMetadata,
 } from '../../../shared/types/import'
 
@@ -65,6 +66,26 @@ const formatImportDate = (value: string): string => {
   }
 
   return date.toLocaleString()
+}
+
+const formatDiagnosticRows = (diagnostic: ImportDiagnosticDto): string => {
+  if (diagnostic.rowNumbers.length === 0) {
+    return ''
+  }
+
+  return ` Rows: ${diagnostic.rowNumbers.join(', ')}${
+    diagnostic.count > diagnostic.rowNumbers.length ? ', ...' : ''
+  }.`
+}
+
+const formatDiagnosticColumn = (diagnostic: ImportDiagnosticDto): string => {
+  return diagnostic.columnName ? ` Column: ${diagnostic.columnName}.` : ''
+}
+
+const formatImportDiagnostic = (diagnostic: ImportDiagnosticDto): string => {
+  return `${diagnostic.message} (${diagnostic.count}).${formatDiagnosticColumn(
+    diagnostic,
+  )}${formatDiagnosticRows(diagnostic)}`
 }
 
 const loadImportBatchesState = async (): Promise<ImportBatchesLoadState> => {
@@ -248,6 +269,19 @@ export function ImportPage() {
           </Table.Tr>
         ))
       : []
+  const importDiagnosticItems =
+    csvImportState.status === 'success'
+      ? csvImportState.result.files.flatMap((file, fileIndex) =>
+          file.diagnostics.map((diagnostic, diagnosticIndex) => (
+            <List.Item key={`${file.fileName}-${fileIndex}-${diagnostic.code}-${diagnosticIndex}`}>
+              <Text fw={600} span>
+                {file.fileName}:{' '}
+              </Text>
+              <Text span>{formatImportDiagnostic(diagnostic)}</Text>
+            </List.Item>
+          )),
+        )
+      : []
   const importResult = csvImportState.status === 'success' ? csvImportState.result : null
   const hasImportFailures = (importResult?.failedCount ?? 0) > 0
   const hasImportedTransactions = (importResult?.insertedCount ?? 0) > 0
@@ -406,6 +440,20 @@ export function ImportPage() {
                   <Table.Tbody>{importResultFileRows}</Table.Tbody>
                 </Table>
               </Table.ScrollContainer>
+
+              {importDiagnosticItems.length > 0 ? (
+                <Alert color="yellow" title="Import diagnostics">
+                  <Stack gap="xs">
+                    <Text size="sm">
+                      Review these safe summaries to understand failed rows. Raw CSV
+                      contents and local file paths are not shown.
+                    </Text>
+                    <List size="sm" spacing="xs">
+                      {importDiagnosticItems}
+                    </List>
+                  </Stack>
+                </Alert>
+              ) : null}
             </Stack>
           </Card>
         ) : null}
