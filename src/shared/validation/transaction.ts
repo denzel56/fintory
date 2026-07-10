@@ -25,12 +25,30 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null
 }
 
-const getPositiveInteger = (value: unknown, fallback: number): number => {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
-    return fallback
+const validateOptionalPositiveInteger = (
+  value: unknown,
+  fallback: number,
+  fieldName: string,
+): ValidationResult<number> => {
+  if (value === undefined || value === null) {
+    return { ok: true, value: fallback }
   }
 
-  return value
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    return {
+      ok: false,
+      code: 'invalid-transactions-query',
+      message: `Transaction ${fieldName} must be a positive integer.`,
+    }
+  }
+
+  return { ok: true, value }
+}
+
+const isValidDateOnly = (value: string): boolean => {
+  const date = new Date(`${value}T00:00:00.000Z`)
+
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
 }
 
 const validateOptionalDate = (value: unknown): ValidationResult<string | null> => {
@@ -38,7 +56,7 @@ const validateOptionalDate = (value: unknown): ValidationResult<string | null> =
     return { ok: true, value: null }
   }
 
-  if (typeof value !== 'string' || !datePattern.test(value)) {
+  if (typeof value !== 'string' || !datePattern.test(value) || !isValidDateOnly(value)) {
     return {
       ok: false,
       code: 'invalid-transactions-query',
@@ -133,8 +151,24 @@ export function validateListTransactionsQuery(
   }
 
   const query: Partial<ListTransactionsQuery> = input ?? {}
-  const page = getPositiveInteger(query.page, defaultPage)
-  const pageSize = Math.min(getPositiveInteger(query.pageSize, defaultPageSize), maxPageSize)
+  const pageResult = validateOptionalPositiveInteger(query.page, defaultPage, 'page')
+
+  if (!pageResult.ok) {
+    return pageResult
+  }
+
+  const pageSizeResult = validateOptionalPositiveInteger(
+    query.pageSize,
+    defaultPageSize,
+    'page size',
+  )
+
+  if (!pageSizeResult.ok) {
+    return pageSizeResult
+  }
+
+  const page = pageResult.value
+  const pageSize = Math.min(pageSizeResult.value, maxPageSize)
   const sortField = typeof query.sortField === 'string' ? query.sortField : 'date'
   const sortDirection = typeof query.sortDirection === 'string' ? query.sortDirection : 'desc'
 
