@@ -55,6 +55,23 @@ const getImportAdapter = (headers: readonly string[]): CsvImportAdapter | null =
 
 const diagnosticRowNumberLimit = 10
 
+const normalizeHeaderName = (header: string): string => header.trim().toLowerCase()
+
+const getMissingRequiredColumnErrors = (
+  adapter: CsvImportAdapter,
+  headers: readonly string[],
+): readonly CsvImportAdapterError[] => {
+  const normalizedHeaders = new Set(headers.map(normalizeHeaderName))
+
+  return adapter.requiredColumns
+    .filter((columnName) => !normalizedHeaders.has(normalizeHeaderName(columnName)))
+    .map((columnName) => ({
+      code: 'missing-required-column',
+      columnName,
+      message: `CSV is missing the required ${columnName} column.`,
+    }))
+}
+
 const getDiagnosticKey = (error: CsvImportAdapterError): string => {
   return `${error.code}:${error.columnName ?? ''}:${error.message}`
 }
@@ -150,6 +167,9 @@ const importCsvFile = async (
         1,
         parseResult.rows.length + getFailedRowCount(parseResult.errors),
       )
+      const missingRequiredColumnErrors = csvImportAdapters.flatMap((candidateAdapter) =>
+        getMissingRequiredColumnErrors(candidateAdapter, parseResult.headers),
+      )
       const diagnostics: readonly ImportDiagnosticDto[] = [
         {
           code: 'unsupported-csv-format',
@@ -158,6 +178,7 @@ const importCsvFile = async (
             'CSV format is not supported yet. Expected columns include date, description, amount, and currency.',
           rowNumbers: [],
         },
+        ...toImportDiagnostics(missingRequiredColumnErrors),
         ...toImportDiagnostics(parseResult.errors.map((error) => ({
           code: error.rowNumber === 1 ? 'malformed-csv-header' : 'malformed-csv-row',
           message: error.message,
