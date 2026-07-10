@@ -26,6 +26,11 @@ const projectIpcChannels = {
   open: 'project:open',
 } as const
 
+const transactionsIpcChannels = {
+  getFilters: 'transactions:getFilters',
+  list: 'transactions:list',
+} as const
+
 const fintoryApi: FintoryApi = {
   app: {
     getVersion: () => ipcRenderer.invoke(appIpcChannels.getVersion) as Promise<string>,
@@ -46,6 +51,10 @@ const fintoryApi: FintoryApi = {
     create: (input) => ipcRenderer.invoke(projectIpcChannels.create, input),
     getCurrent: () => ipcRenderer.invoke(projectIpcChannels.getCurrent),
     open: () => ipcRenderer.invoke(projectIpcChannels.open),
+  },
+  transactions: {
+    getFilters: () => ipcRenderer.invoke(transactionsIpcChannels.getFilters),
+    list: (query) => ipcRenderer.invoke(transactionsIpcChannels.list, query),
   },
 }
 
