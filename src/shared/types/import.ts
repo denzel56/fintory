@@ -22,11 +22,20 @@ export type ImportCsvFilesInput = {
 
 export type ImportCsvFileSummaryDto = {
   readonly adapterId: string
+  readonly diagnostics: readonly ImportDiagnosticDto[]
   readonly duplicateCount: number
   readonly failedCount: number
   readonly fileName: string
   readonly insertedCount: number
   readonly rowCount: number
+}
+
+export type ImportDiagnosticDto = {
+  readonly code: string
+  readonly columnName?: string
+  readonly count: number
+  readonly message: string
+  readonly rowNumbers: readonly number[]
 }
 
 export type ImportCsvFilesResult =

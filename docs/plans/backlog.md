@@ -15,3 +15,15 @@ When a new non-urgent problem is discovered during implementation or review, add
 - **Risk:** if a channel string changes in `src/shared/ipc/*` but the duplicate preload string is not updated, renderer-to-main IPC calls can break.
 - **Future direction:** create one CJS-safe source of truth for IPC channel constants, such as JSON constants, a dedicated CommonJS-compatible constants module, or a bundled preload build. Keep the typed API surface unchanged for renderer code.
 - **Verification:** `npm run lint`, `npm run build`, and manual Electron startup confirming `window.fintory` is available.
+
+
+### Add clear import history action
+
+- **Status:** open
+- **Priority:** medium
+- **Area:** CSV import / import history UI / SQLite
+- **Context:** The Import page shows stored import batches but does not provide a way to clear the history after manual testing or after a user no longer needs batch records.
+- **Scope:** add a user-confirmed `Clear history` action that deletes import batch records for the active project while preserving imported transactions.
+- **Data policy:** clearing import history must not delete transactions; existing `transactions.import_batch_id` should become `NULL` through the schema's `ON DELETE SET NULL` behavior or an explicit safe update/delete transaction.
+- **Privacy:** do not log file names, transaction data, CSV contents, or local paths during the clear action.
+- **Verification:** import CSV -> confirm history row appears -> clear history -> confirm history is empty -> confirm Transactions page still shows imported transactions.
