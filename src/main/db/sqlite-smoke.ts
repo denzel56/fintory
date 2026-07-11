@@ -17,6 +17,7 @@ export type SqliteSmokeResult = {
   readonly coreSchemaRowCount: number
   readonly coreSchemaTableCount: number
   readonly insertedName: string
+  readonly importHistoryClearPassed: boolean
   readonly migrationVersion: number
   readonly seededCategoryCount: number
   readonly repositorySmokePassed: boolean
@@ -282,6 +283,62 @@ const runTransactionSourceHashUniqueSmokeCheck = (database: DatabaseSync): boole
   return false
 }
 
+const runImportHistoryClearSmokeCheck = (database: DatabaseSync): boolean => {
+  const timestamp = '2026-01-01T00:00:00.000Z'
+  const importBatchesRepository = createImportBatchesRepository(database)
+
+  importBatchesRepository.insert({
+    adapterId: 'smoke-adapter-v1',
+    duplicateCount: 0,
+    failedCount: 0,
+    id: 'clear-history-batch',
+    importedAt: timestamp,
+    insertedCount: 1,
+    rowCount: 1,
+    sourceFileHash: 'clear-history-source-file-hash',
+    sourceFileName: 'sample.csv',
+  })
+
+  database
+    .prepare(
+      `INSERT INTO transactions (
+        id,
+        transaction_date,
+        description,
+        amount_minor,
+        currency,
+        direction,
+        source_hash,
+        import_batch_id,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      'clear-history-transaction',
+      '2026-01-04',
+      'Clear history transaction',
+      3000,
+      'USD',
+      'expense',
+      'clear-history-source-hash',
+      'clear-history-batch',
+      timestamp,
+      timestamp,
+    )
+
+  const clearedCount = importBatchesRepository.clear()
+  const transactionRow = database
+    .prepare('SELECT import_batch_id FROM transactions WHERE id = ?')
+    .get('clear-history-transaction') as { import_batch_id: string | null } | undefined
+
+  return (
+    clearedCount === 1 &&
+    importBatchesRepository.count() === 0 &&
+    transactionRow?.import_batch_id === null
+  )
+}
+
 export function runSqliteSmokeCheck(): SqliteSmokeResult {
   const database = new DatabaseSync(':memory:')
 
@@ -320,6 +377,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
     const transactionRollbackPassed = runTransactionRollbackSmokeCheck(database)
     const categoryCrudSmokePassed = runCategoryCrudSmokeCheck(database)
     const transactionSourceHashUniquePassed = runTransactionSourceHashUniqueSmokeCheck(database)
+    const importHistoryClearPassed = runImportHistoryClearSmokeCheck(database)
     const seededCategoryCount = runDefaultCategorySeedSmokeCheck(database)
 
     if (!insertedRow || !versionRow) {
@@ -340,6 +398,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
       !transactionRollbackPassed ||
       !categoryCrudSmokePassed ||
       !transactionSourceHashUniquePassed ||
+      !importHistoryClearPassed ||
       seededCategoryCount !== defaultCategoryCount
     ) {
       throw new Error('SQLite repository smoke check did not return expected results.')
@@ -352,6 +411,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
       coreSchemaRowCount,
       coreSchemaTableCount: expectedCoreSchemaTables.length,
       insertedName: insertedRow.name,
+      importHistoryClearPassed,
       migrationVersion: migrationState.currentVersion,
       seededCategoryCount,
       repositorySmokePassed,

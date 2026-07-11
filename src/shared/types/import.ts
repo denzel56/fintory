@@ -57,6 +57,17 @@ export type ImportCsvFilesResult =
       readonly message: string
     }
 
+export type ClearImportHistoryResult =
+  | {
+      readonly ok: true
+      readonly clearedCount: number
+    }
+  | {
+      readonly ok: false
+      readonly code: 'clear-import-history-failed' | 'project-not-open'
+      readonly message: string
+    }
+
 export type ListImportBatchesResult =
   | {
       readonly ok: true

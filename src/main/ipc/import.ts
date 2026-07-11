@@ -5,6 +5,7 @@ import { BrowserWindow, dialog, ipcMain } from 'electron'
 import type { OpenDialogOptions } from 'electron'
 import { importIpcChannels } from '../../shared/ipc/import.js'
 import type {
+  ClearImportHistoryResult,
   ImportCsvFilesInput,
   ImportCsvFilesResult,
   ImportBatchDto,
@@ -14,6 +15,7 @@ import type {
 } from '../../shared/types/import.js'
 import { getActiveProjectDatabase } from '../db/project-database-connection.js'
 import { createImportBatchesRepository } from '../db/repositories/import-batches-repository.js'
+import { runInTransaction } from '../db/transactions.js'
 import { importCsvFiles } from '../import/csv-import-service.js'
 
 const selectedCsvFilePathsById = new Map<string, string>()
@@ -92,6 +94,31 @@ const isImportCsvFilesInput = (input: unknown): input is ImportCsvFilesInput => 
 const isString = (value: string | undefined): value is string => typeof value === 'string'
 
 export function registerImportIpcHandlers(): void {
+  ipcMain.handle(importIpcChannels.clearHistory, (): ClearImportHistoryResult => {
+    const database = getActiveProjectDatabase()
+
+    if (!database) {
+      return {
+        ok: false,
+        code: 'project-not-open',
+        message: 'Open or create a project before clearing import history.',
+      }
+    }
+
+    try {
+      const importBatchesRepository = createImportBatchesRepository(database)
+      const clearedCount = runInTransaction(database, () => importBatchesRepository.clear())
+
+      return { ok: true, clearedCount }
+    } catch {
+      return {
+        ok: false,
+        code: 'clear-import-history-failed',
+        message: 'Import history could not be cleared right now.',
+      }
+    }
+  })
+
   ipcMain.handle(
     importIpcChannels.importCsvFiles,
     async (_event, input: unknown): Promise<ImportCsvFilesResult> => {
