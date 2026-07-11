@@ -12,6 +12,9 @@ export type CsvImportSmokeResult = {
   readonly firstImportDuplicateCount: number
   readonly firstImportFailedCount: number
   readonly firstImportInsertedCount: number
+  readonly genericManualImportDuplicateCount: number
+  readonly genericManualImportFailedCount: number
+  readonly genericManualImportInsertedCount: number
   readonly manualImportDuplicateCount: number
   readonly manualImportFailedCount: number
   readonly manualImportInsertedCount: number
@@ -45,7 +48,7 @@ export const runCsvImportSmokeCheck = async (): Promise<CsvImportSmokeResult> =>
       [
         'posted,memo,total,ccy',
         '03.07.2026,Manual coffee,-10.25,USD',
-        '04.07.2026,Manual salary,1000.00,USD',
+        '04.07.2026,Manual salary,1000.00,',
       ].join('\n'),
       { encoding: 'utf8' },
     )
@@ -55,6 +58,16 @@ export const runCsvImportSmokeCheck = async (): Promise<CsvImportSmokeResult> =>
 
     const firstImport = await importCsvFiles({ database, files: [{ filePath: csvFilePath }] })
     const secondImport = await importCsvFiles({ database, files: [{ filePath: csvFilePath }] })
+    const genericManualImport = await importCsvFileWithMapping({
+      database,
+      filePath: csvFilePath,
+      mapping: {
+        amountColumn: 'amount',
+        currencyColumn: 'currency',
+        dateColumn: 'date',
+        descriptionColumn: 'description',
+      },
+    })
     const manualPreview = await previewCsvFile({ filePath: manualCsvFilePath })
     const manualImport = await importCsvFileWithMapping({
       database,
@@ -65,10 +78,17 @@ export const runCsvImportSmokeCheck = async (): Promise<CsvImportSmokeResult> =>
         dateColumn: 'posted',
         dateFormat: 'dd.mm.yyyy',
         descriptionColumn: 'memo',
+        fixedCurrency: 'USD',
       },
     })
 
-    if (!firstImport.ok || !secondImport.ok || !manualPreview.ok || !manualImport.ok) {
+    if (
+      !firstImport.ok ||
+      !secondImport.ok ||
+      !genericManualImport.ok ||
+      !manualPreview.ok ||
+      !manualImport.ok
+    ) {
       throw new Error('CSV import smoke check could not import sample CSV.')
     }
 
@@ -76,6 +96,9 @@ export const runCsvImportSmokeCheck = async (): Promise<CsvImportSmokeResult> =>
       firstImportDuplicateCount: firstImport.duplicateCount,
       firstImportFailedCount: firstImport.failedCount,
       firstImportInsertedCount: firstImport.insertedCount,
+      genericManualImportDuplicateCount: genericManualImport.duplicateCount,
+      genericManualImportFailedCount: genericManualImport.failedCount,
+      genericManualImportInsertedCount: genericManualImport.insertedCount,
       importBatchCount: createImportBatchesRepository(database).count(),
       manualImportDuplicateCount: manualImport.duplicateCount,
       manualImportFailedCount: manualImport.failedCount,

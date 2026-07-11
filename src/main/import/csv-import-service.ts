@@ -247,6 +247,7 @@ const importParsedCsvFile = (input: {
   }
   readonly database: DatabaseSync
   readonly fileName: string
+  readonly sourceHashAdapterId?: string
   readonly sourceFileHash: string
 }): ImportCsvFileSummaryDto => {
   const failedCount = getFailedRowCount(input.adapterResult.errors)
@@ -272,7 +273,10 @@ const importParsedCsvFile = (input: {
     adapterId: input.adapterId,
     database: input.database,
     diagnostics,
-    draftItems: createTransactionSourceHashes(input.adapterId, input.adapterResult.drafts),
+    draftItems: createTransactionSourceHashes(
+      input.sourceHashAdapterId ?? input.adapterId,
+      input.adapterResult.drafts,
+    ),
     failedCount,
     fileName: input.fileName,
     rowCount,
@@ -381,6 +385,7 @@ export const importCsvFileWithMapping = async ({
         adapterResult: normalizeRowsWithManualMapping(parseResult, mapping),
         database,
         fileName,
+        sourceHashAdapterId: genericCsvImportAdapter.id,
         sourceFileHash,
       }),
     )

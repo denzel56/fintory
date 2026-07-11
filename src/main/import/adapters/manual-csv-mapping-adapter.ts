@@ -132,7 +132,7 @@ const normalizeRow = (
   const description = getMappedValue(row, mapping.descriptionColumn)
   const amountText = getMappedValue(row, mapping.amountColumn)
   const currencyText = mapping.currencyColumn
-    ? getMappedValue(row, mapping.currencyColumn)
+    ? getMappedValue(row, mapping.currencyColumn) || (mapping.fixedCurrency ?? '')
     : (mapping.fixedCurrency ?? '')
   const errors: CsvImportAdapterError[] = []
 
@@ -202,9 +202,10 @@ export const normalizeRowsWithManualMapping = (
   mapping: ManualCsvColumnMapping,
 ): CsvImportAdapterResult => {
   const parseErrors = parseResult.errors.map(mapParseError)
+  const parseHeaderErrors = parseErrors.filter((error) => error.code === 'malformed-csv-header')
   const headerErrors = getHeaderErrors(parseResult.headers, mapping)
 
-  if (headerErrors.length > 0) {
+  if (parseHeaderErrors.length > 0 || headerErrors.length > 0) {
     return {
       adapterId,
       drafts: [],
