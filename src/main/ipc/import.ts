@@ -109,6 +109,9 @@ const isPreviewCsvFileInput = (input: unknown): input is PreviewCsvFileInput => 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0
 
+const isManualCsvDateFormat = (value: unknown): boolean =>
+  value === undefined || value === 'dd.mm.yyyy' || value === 'mm/dd/yyyy' || value === 'yyyy-mm-dd'
+
 const isImportCsvFileWithMappingInput = (
   input: unknown,
 ): input is ImportCsvFileWithMappingInput => {
@@ -134,6 +137,7 @@ const isImportCsvFileWithMappingInput = (
     isNonEmptyString(candidate.selectionId) &&
     isNonEmptyString(mapping.amountColumn) &&
     isNonEmptyString(mapping.dateColumn) &&
+    isManualCsvDateFormat(mapping.dateFormat) &&
     isNonEmptyString(mapping.descriptionColumn) &&
     hasCurrencyFallback
   )

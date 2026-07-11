@@ -20,6 +20,7 @@ import type {
   ImportCsvFilesResult,
   ImportDiagnosticDto,
   ManualCsvColumnMapping,
+  ManualCsvDateFormat,
   PreviewCsvFileResult,
   SelectedCsvFileMetadata,
 } from '../../../shared/types/import'
@@ -111,9 +112,16 @@ const createEmptyManualMapping = (): ManualCsvColumnMapping => ({
   amountColumn: '',
   currencyColumn: '',
   dateColumn: '',
+  dateFormat: 'yyyy-mm-dd',
   descriptionColumn: '',
   fixedCurrency: '',
 })
+
+const manualDateFormatOptions: readonly { readonly label: string; readonly value: ManualCsvDateFormat }[] = [
+  { label: 'YYYY-MM-DD', value: 'yyyy-mm-dd' },
+  { label: 'DD.MM.YYYY', value: 'dd.mm.yyyy' },
+  { label: 'MM/DD/YYYY', value: 'mm/dd/yyyy' },
+]
 
 const getManualMappingError = (mapping: ManualCsvColumnMapping): string | null => {
   if (!mapping.dateColumn || !mapping.descriptionColumn || !mapping.amountColumn) {
@@ -362,6 +370,7 @@ export function ImportPage() {
           amountColumn: manualMapping.amountColumn,
           currencyColumn: manualMapping.currencyColumn || undefined,
           dateColumn: manualMapping.dateColumn,
+          dateFormat: manualMapping.dateFormat ?? 'yyyy-mm-dd',
           descriptionColumn: manualMapping.descriptionColumn,
           fixedCurrency: manualMapping.fixedCurrency?.trim().toUpperCase() || undefined,
         },
@@ -489,7 +498,11 @@ export function ImportPage() {
   const importResultAlertColor = hasImportedTransactions && !hasImportFailures ? 'green' : 'yellow'
   const manualPreview =
     manualMappingPreviewState.status === 'ready' ? manualMappingPreviewState.preview : null
-  const manualColumnOptions = manualPreview?.headers.map((header) => ({ label: header, value: header })) ?? []
+  const manualColumnOptions =
+    manualPreview?.columns.map((column) => ({
+      label: `${column.header} (${column.nonEmptyCount}/${manualPreview.rowCount} non-empty)`,
+      value: column.header,
+    })) ?? []
 
   return (
     <>
@@ -635,6 +648,17 @@ export function ImportPage() {
                       value={manualMapping.dateColumn || null}
                       onChange={(value) =>
                         setManualMapping({ ...manualMapping, dateColumn: value ?? '' })
+                      }
+                    />
+                    <Select
+                      data={manualDateFormatOptions}
+                      label="Date format"
+                      value={manualMapping.dateFormat ?? 'yyyy-mm-dd'}
+                      onChange={(value) =>
+                        setManualMapping({
+                          ...manualMapping,
+                          dateFormat: (value ?? 'yyyy-mm-dd') as ManualCsvDateFormat,
+                        })
                       }
                     />
                     <Select

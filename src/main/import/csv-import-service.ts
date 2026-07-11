@@ -7,6 +7,7 @@ import type {
   ImportCsvFileWithMappingInput,
   ImportCsvFilesResult,
   ImportDiagnosticDto,
+  PreviewCsvColumnDto,
   PreviewCsvFileResult,
 } from '../../shared/types/import.js'
 import { createImportBatchesRepository } from '../db/repositories/import-batches-repository.js'
@@ -61,6 +62,14 @@ const getFailedRowCount = (errors: readonly { readonly rowNumber?: number }[]): 
 
 const getImportAdapter = (headers: readonly string[]): CsvImportAdapter | null =>
   csvImportAdapters.find((adapter) => adapter.canHandle(headers)) ?? null
+
+const getPreviewColumns = (parseResult: CsvParseResult): readonly PreviewCsvColumnDto[] => {
+  return parseResult.headers.map((header) => ({
+    header,
+    nonEmptyCount: parseResult.rows.filter((row) => (row.values[header] ?? '').trim().length > 0)
+      .length,
+  }))
+}
 
 const diagnosticRowNumberLimit = 10
 
@@ -336,6 +345,7 @@ export const previewCsvFile = async (file: CsvImportFileInput): Promise<PreviewC
 
     return {
       ok: true,
+      columns: getPreviewColumns(parseResult),
       detectedAdapterId: adapter?.id ?? null,
       fileName: basename(file.filePath),
       headers: parseResult.headers,

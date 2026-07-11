@@ -20,10 +20,13 @@ export type ImportCsvFilesInput = {
   readonly selectionIds: readonly string[]
 }
 
+export type ManualCsvDateFormat = 'dd.mm.yyyy' | 'mm/dd/yyyy' | 'yyyy-mm-dd'
+
 export type ManualCsvColumnMapping = {
   readonly amountColumn: string
   readonly currencyColumn?: string
   readonly dateColumn: string
+  readonly dateFormat?: ManualCsvDateFormat
   readonly descriptionColumn: string
   readonly fixedCurrency?: string
 }
@@ -74,9 +77,15 @@ export type ImportCsvFilesResult =
       readonly message: string
     }
 
+export type PreviewCsvColumnDto = {
+  readonly header: string
+  readonly nonEmptyCount: number
+}
+
 export type PreviewCsvFileResult =
   | {
       readonly ok: true
+      readonly columns: readonly PreviewCsvColumnDto[]
       readonly detectedAdapterId: string | null
       readonly fileName: string
       readonly headers: readonly string[]

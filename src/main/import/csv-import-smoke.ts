@@ -15,6 +15,7 @@ export type CsvImportSmokeResult = {
   readonly manualImportDuplicateCount: number
   readonly manualImportFailedCount: number
   readonly manualImportInsertedCount: number
+  readonly manualPreviewDescriptionNonEmptyCount: number
   readonly manualPreviewHeaderCount: number
   readonly secondImportDuplicateCount: number
   readonly secondImportFailedCount: number
@@ -43,8 +44,8 @@ export const runCsvImportSmokeCheck = async (): Promise<CsvImportSmokeResult> =>
       manualCsvFilePath,
       [
         'posted,memo,total,ccy',
-        '2026-07-03,Manual coffee,-10.25,USD',
-        '2026-07-04,Manual salary,1000.00,USD',
+        '03.07.2026,Manual coffee,-10.25,USD',
+        '04.07.2026,Manual salary,1000.00,USD',
       ].join('\n'),
       { encoding: 'utf8' },
     )
@@ -62,6 +63,7 @@ export const runCsvImportSmokeCheck = async (): Promise<CsvImportSmokeResult> =>
         amountColumn: 'total',
         currencyColumn: 'ccy',
         dateColumn: 'posted',
+        dateFormat: 'dd.mm.yyyy',
         descriptionColumn: 'memo',
       },
     })
@@ -78,6 +80,8 @@ export const runCsvImportSmokeCheck = async (): Promise<CsvImportSmokeResult> =>
       manualImportDuplicateCount: manualImport.duplicateCount,
       manualImportFailedCount: manualImport.failedCount,
       manualImportInsertedCount: manualImport.insertedCount,
+      manualPreviewDescriptionNonEmptyCount:
+        manualPreview.columns.find((column) => column.header === 'memo')?.nonEmptyCount ?? 0,
       manualPreviewHeaderCount: manualPreview.headers.length,
       secondImportDuplicateCount: secondImport.duplicateCount,
       secondImportFailedCount: secondImport.failedCount,

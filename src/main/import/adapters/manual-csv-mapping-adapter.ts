@@ -1,4 +1,4 @@
-import type { ManualCsvColumnMapping } from '../../../shared/types/import.js'
+import type { ManualCsvColumnMapping, ManualCsvDateFormat } from '../../../shared/types/import.js'
 import type { CsvParseError, CsvParseResult, ParsedCsvRow } from '../csv-parser.js'
 import type { TransactionDirection, TransactionDraft } from '../transaction-draft.js'
 import type { CsvImportAdapterError, CsvImportAdapterResult } from './csv-import-adapter.js'
@@ -13,15 +13,9 @@ const normalizeCurrency = (currencyText: string): string | null => {
   return /^[A-Z]{3}$/.test(currency) ? currency : null
 }
 
-const isValidIsoDate = (dateText: string): boolean => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) {
-    return false
-  }
+const defaultDateFormat: ManualCsvDateFormat = 'yyyy-mm-dd'
 
-  const [yearText, monthText, dayText] = dateText.split('-')
-  const year = Number(yearText)
-  const month = Number(monthText)
-  const day = Number(dayText)
+const isValidDateParts = (year: number, month: number, day: number): boolean => {
   const date = new Date(Date.UTC(year, month - 1, day))
 
   return (
@@ -29,6 +23,36 @@ const isValidIsoDate = (dateText: string): boolean => {
     date.getUTCMonth() === month - 1 &&
     date.getUTCDate() === day
   )
+}
+
+const formatIsoDate = (year: number, month: number, day: number): string => {
+  return [
+    String(year).padStart(4, '0'),
+    String(month).padStart(2, '0'),
+    String(day).padStart(2, '0'),
+  ].join('-')
+}
+
+const parseDate = (
+  dateText: string,
+  dateFormat: ManualCsvDateFormat = defaultDateFormat,
+): string | null => {
+  const patterns: Record<ManualCsvDateFormat, RegExp> = {
+    'dd.mm.yyyy': /^(?<day>\d{1,2})\.(?<month>\d{1,2})\.(?<year>\d{4})$/,
+    'mm/dd/yyyy': /^(?<month>\d{1,2})\/(?<day>\d{1,2})\/(?<year>\d{4})$/,
+    'yyyy-mm-dd': /^(?<year>\d{4})-(?<month>\d{1,2})-(?<day>\d{1,2})$/,
+  }
+  const match = patterns[dateFormat].exec(dateText.trim())
+
+  if (!match?.groups) {
+    return null
+  }
+
+  const year = Number(match.groups.year)
+  const month = Number(match.groups.month)
+  const day = Number(match.groups.day)
+
+  return isValidDateParts(year, month, day) ? formatIsoDate(year, month, day) : null
 }
 
 const parseSignedAmountMinor = (
@@ -112,10 +136,19 @@ const normalizeRow = (
     : (mapping.fixedCurrency ?? '')
   const errors: CsvImportAdapterError[] = []
 
+  const transactionDate = parseDate(dateText, mapping.dateFormat)
+
   if (!dateText) {
     errors.push(createRowError('missing-required-value', row.rowNumber, mapping.dateColumn, 'Transaction date is required.'))
-  } else if (!isValidIsoDate(dateText)) {
-    errors.push(createRowError('invalid-date', row.rowNumber, mapping.dateColumn, 'Transaction date must use YYYY-MM-DD format.'))
+  } else if (!transactionDate) {
+    errors.push(
+      createRowError(
+        'invalid-date',
+        row.rowNumber,
+        mapping.dateColumn,
+        'Transaction date does not match the selected date format.',
+      ),
+    )
   }
 
   if (!description) {
@@ -145,7 +178,7 @@ const normalizeRow = (
     errors.push(createRowError('invalid-currency', row.rowNumber, mapping.currencyColumn ?? 'fixedCurrency', 'Transaction currency must be a three-letter ISO code.'))
   }
 
-  if (errors.length > 0 || !amountResult.ok || !currency) {
+  if (errors.length > 0 || !amountResult.ok || !currency || !transactionDate) {
     return { ok: false, errors }
   }
 
@@ -159,7 +192,7 @@ const normalizeRow = (
       merchant: null,
       rawDescription: description,
       rowNumber: row.rowNumber,
-      transactionDate: dateText,
+      transactionDate,
     },
   }
 }
