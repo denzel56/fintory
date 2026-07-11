@@ -6,10 +6,12 @@ import {
   List,
   Loader,
   Modal,
+  Select,
   SimpleGrid,
   Stack,
   Table,
   Text,
+  TextInput,
   Title,
 } from '@mantine/core'
 import { useEffect, useState } from 'react'
@@ -17,6 +19,8 @@ import type {
   ImportBatchDto,
   ImportCsvFilesResult,
   ImportDiagnosticDto,
+  ManualCsvColumnMapping,
+  PreviewCsvFileResult,
   SelectedCsvFileMetadata,
 } from '../../../shared/types/import'
 
@@ -51,6 +55,14 @@ type ClearImportHistoryState =
   | { readonly status: 'idle' }
   | { readonly status: 'clearing' }
   | { readonly status: 'success'; readonly clearedCount: number }
+  | { readonly status: 'error'; readonly message: string }
+
+type ManualCsvPreview = Extract<PreviewCsvFileResult, { readonly ok: true }>
+
+type ManualMappingPreviewState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading' }
+  | { readonly status: 'ready'; readonly preview: ManualCsvPreview }
   | { readonly status: 'error'; readonly message: string }
 
 const formatFileSize = (sizeBytes: number): string => {
@@ -95,6 +107,30 @@ const formatImportDiagnostic = (diagnostic: ImportDiagnosticDto): string => {
   )}${formatDiagnosticRows(diagnostic)}`
 }
 
+const createEmptyManualMapping = (): ManualCsvColumnMapping => ({
+  amountColumn: '',
+  currencyColumn: '',
+  dateColumn: '',
+  descriptionColumn: '',
+  fixedCurrency: '',
+})
+
+const getManualMappingError = (mapping: ManualCsvColumnMapping): string | null => {
+  if (!mapping.dateColumn || !mapping.descriptionColumn || !mapping.amountColumn) {
+    return 'Map date, description, and signed amount columns before importing.'
+  }
+
+  if (!mapping.currencyColumn && !mapping.fixedCurrency?.trim()) {
+    return 'Map a currency column or enter a fixed three-letter currency code.'
+  }
+
+  if (mapping.fixedCurrency && !/^[A-Za-z]{3}$/.test(mapping.fixedCurrency.trim())) {
+    return 'Fixed currency must be a three-letter ISO code.'
+  }
+
+  return null
+}
+
 const loadImportBatchesState = async (): Promise<ImportBatchesLoadState> => {
   if (!window.fintory) {
     return {
@@ -130,6 +166,11 @@ export function ImportPage() {
   const [clearImportHistoryState, setClearImportHistoryState] =
     useState<ClearImportHistoryState>({ status: 'idle' })
   const [isClearHistoryModalOpen, setIsClearHistoryModalOpen] = useState(false)
+  const [manualMappingPreviewState, setManualMappingPreviewState] =
+    useState<ManualMappingPreviewState>({ status: 'idle' })
+  const [manualMapping, setManualMapping] = useState<ManualCsvColumnMapping>(
+    createEmptyManualMapping,
+  )
   const isSelecting = csvSelectionState.status === 'selecting'
   const selectedFiles = csvSelectionState.files
   const importBatches =
@@ -137,9 +178,17 @@ export function ImportPage() {
   const isImportHistoryLoading = importBatchesLoadState.status === 'loading'
   const isImporting = csvImportState.status === 'importing'
   const isClearingImportHistory = clearImportHistoryState.status === 'clearing'
+  const isManualPreviewLoading = manualMappingPreviewState.status === 'loading'
   const canImportSelectedFiles = selectedFiles.length > 0 && !isSelecting && !isImporting
   const canClearImportHistory =
     importBatches.length > 0 && !isImportHistoryLoading && !isClearingImportHistory
+  const canPreviewManualMapping = selectedFiles.length === 1 && !isSelecting && !isImporting
+  const manualMappingError = getManualMappingError(manualMapping)
+  const canImportManualMapping =
+    selectedFiles.length === 1 &&
+    manualMappingPreviewState.status === 'ready' &&
+    !manualMappingError &&
+    !isImporting
 
   const loadImportBatches = async () => {
     setImportBatchesLoadState({ status: 'loading' })
@@ -194,6 +243,8 @@ export function ImportPage() {
       }
 
       setCsvImportState({ status: 'idle' })
+      setManualMappingPreviewState({ status: 'idle' })
+      setManualMapping(createEmptyManualMapping())
       setCsvSelectionState({ status: 'idle', files: result.files })
     } catch {
       setCsvSelectionState({
@@ -239,6 +290,95 @@ export function ImportPage() {
       setCsvImportState({
         status: 'error',
         message: 'CSV files could not be imported right now.',
+      })
+    }
+  }
+
+  const handlePreviewManualMapping = async () => {
+    if (!window.fintory) {
+      setManualMappingPreviewState({
+        status: 'error',
+        message: 'The Electron preload bridge is not available in this runtime.',
+      })
+      return
+    }
+
+    const [selectedFile] = selectedFiles
+
+    if (!selectedFile) {
+      setManualMappingPreviewState({
+        status: 'error',
+        message: 'Select one CSV file before mapping columns.',
+      })
+      return
+    }
+
+    setManualMappingPreviewState({ status: 'loading' })
+
+    try {
+      const result = await window.fintory.import.previewCsvFile({
+        selectionId: selectedFile.selectionId,
+      })
+
+      if (!result.ok) {
+        setManualMappingPreviewState({ status: 'error', message: result.message })
+        return
+      }
+
+      setManualMappingPreviewState({ status: 'ready', preview: result })
+    } catch {
+      setManualMappingPreviewState({
+        status: 'error',
+        message: 'CSV columns could not be previewed right now.',
+      })
+    }
+  }
+
+  const handleImportManualMapping = async () => {
+    if (!window.fintory) {
+      setCsvImportState({
+        status: 'error',
+        message: 'The Electron preload bridge is not available in this runtime.',
+      })
+      return
+    }
+
+    const [selectedFile] = selectedFiles
+    const validationMessage = getManualMappingError(manualMapping)
+
+    if (!selectedFile || validationMessage) {
+      setCsvImportState({
+        status: 'error',
+        message: validationMessage ?? 'Select one CSV file before importing with a mapping.',
+      })
+      return
+    }
+
+    setCsvImportState({ status: 'importing' })
+
+    try {
+      const result = await window.fintory.import.importCsvFileWithMapping({
+        mapping: {
+          amountColumn: manualMapping.amountColumn,
+          currencyColumn: manualMapping.currencyColumn || undefined,
+          dateColumn: manualMapping.dateColumn,
+          descriptionColumn: manualMapping.descriptionColumn,
+          fixedCurrency: manualMapping.fixedCurrency?.trim().toUpperCase() || undefined,
+        },
+        selectionId: selectedFile.selectionId,
+      })
+
+      if (!result.ok) {
+        setCsvImportState({ status: 'error', message: result.message })
+        return
+      }
+
+      setCsvImportState({ status: 'success', result })
+      await loadImportBatches()
+    } catch {
+      setCsvImportState({
+        status: 'error',
+        message: 'CSV file could not be imported with the selected mapping right now.',
       })
     }
   }
@@ -347,6 +487,9 @@ export function ImportPage() {
         ? 'Review safe import totals below. Duplicate transactions were skipped.'
         : 'No transactions were written to the project. Review failed row counts before trying again.'
   const importResultAlertColor = hasImportedTransactions && !hasImportFailures ? 'green' : 'yellow'
+  const manualPreview =
+    manualMappingPreviewState.status === 'ready' ? manualMappingPreviewState.preview : null
+  const manualColumnOptions = manualPreview?.headers.map((header) => ({ label: header, value: header })) ?? []
 
   return (
     <>
@@ -441,6 +584,118 @@ export function ImportPage() {
             </Stack>
           </Card>
         )}
+
+        {selectedFiles.length > 0 ? (
+          <Card padding="lg" radius="md" withBorder>
+            <Stack gap="md">
+              <Group align="flex-start" justify="space-between">
+                <Stack gap={4}>
+                  <Text fw={700}>Manual column mapping</Text>
+                  <Text c="dimmed" size="sm">
+                    Use this for unknown CSV formats. Fintory previews headers only; raw CSV
+                    rows and local file paths stay out of the renderer.
+                  </Text>
+                </Stack>
+                <Button
+                  disabled={!canPreviewManualMapping}
+                  loading={isManualPreviewLoading}
+                  variant="light"
+                  onClick={() => void handlePreviewManualMapping()}
+                >
+                  Preview columns
+                </Button>
+              </Group>
+
+              {selectedFiles.length > 1 ? (
+                <Alert color="yellow" title="Manual mapping imports one file at a time">
+                  Select a single CSV file to map columns manually.
+                </Alert>
+              ) : null}
+
+              {manualMappingPreviewState.status === 'error' ? (
+                <Alert color="yellow" title="Manual mapping unavailable">
+                  {manualMappingPreviewState.message}
+                </Alert>
+              ) : null}
+
+              {manualPreview ? (
+                <Stack gap="md">
+                  <Alert color={manualPreview.detectedAdapterId ? 'blue' : 'yellow'} title="CSV headers loaded">
+                    {manualPreview.detectedAdapterId
+                      ? `Built-in adapter detected: ${manualPreview.detectedAdapterId}. Manual mapping is optional.`
+                      : 'No built-in adapter was detected. Map the required columns below.'}{' '}
+                    Rows found: {manualPreview.rowCount}.
+                  </Alert>
+
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                    <Select
+                      data={manualColumnOptions}
+                      label="Date column"
+                      placeholder="Choose column"
+                      value={manualMapping.dateColumn || null}
+                      onChange={(value) =>
+                        setManualMapping({ ...manualMapping, dateColumn: value ?? '' })
+                      }
+                    />
+                    <Select
+                      data={manualColumnOptions}
+                      label="Description column"
+                      placeholder="Choose column"
+                      value={manualMapping.descriptionColumn || null}
+                      onChange={(value) =>
+                        setManualMapping({ ...manualMapping, descriptionColumn: value ?? '' })
+                      }
+                    />
+                    <Select
+                      data={manualColumnOptions}
+                      label="Signed amount column"
+                      placeholder="Choose column"
+                      value={manualMapping.amountColumn || null}
+                      onChange={(value) =>
+                        setManualMapping({ ...manualMapping, amountColumn: value ?? '' })
+                      }
+                    />
+                    <Select
+                      clearable
+                      data={manualColumnOptions}
+                      label="Currency column"
+                      placeholder="Choose column or use fixed currency"
+                      value={manualMapping.currencyColumn || null}
+                      onChange={(value) =>
+                        setManualMapping({ ...manualMapping, currencyColumn: value ?? '' })
+                      }
+                    />
+                  </SimpleGrid>
+
+                  <TextInput
+                    label="Fixed currency fallback"
+                    placeholder="USD"
+                    value={manualMapping.fixedCurrency ?? ''}
+                    onChange={(event) =>
+                      setManualMapping({ ...manualMapping, fixedCurrency: event.currentTarget.value })
+                    }
+                  />
+
+                  {manualMappingError ? (
+                    <Alert color="yellow" title="Mapping is incomplete">
+                      {manualMappingError}
+                    </Alert>
+                  ) : null}
+
+                  <Group justify="flex-end">
+                    <Button
+                      disabled={!canImportManualMapping}
+                      loading={isImporting}
+                      onClick={() => void handleImportManualMapping()}
+                    >
+                      Import with mapping
+                    </Button>
+                  </Group>
+                </Stack>
+              ) : null}
+            </Stack>
+          </Card>
+        ) : null}
 
         {csvImportState.status === 'error' ? (
           <Alert color="yellow" title="CSV import unavailable">
