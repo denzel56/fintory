@@ -6,17 +6,24 @@ import type { OpenDialogOptions } from 'electron'
 import { importIpcChannels } from '../../shared/ipc/import.js'
 import type {
   ClearImportHistoryResult,
+  ImportCsvFileWithMappingInput,
   ImportCsvFilesInput,
   ImportCsvFilesResult,
   ImportBatchDto,
   ListImportBatchesResult,
+  PreviewCsvFileInput,
+  PreviewCsvFileResult,
   SelectCsvFilesResult,
   SelectedCsvFileMetadata,
 } from '../../shared/types/import.js'
 import { getActiveProjectDatabase } from '../db/project-database-connection.js'
 import { createImportBatchesRepository } from '../db/repositories/import-batches-repository.js'
 import { runInTransaction } from '../db/transactions.js'
-import { importCsvFiles } from '../import/csv-import-service.js'
+import {
+  importCsvFileWithMapping,
+  importCsvFiles,
+  previewCsvFile,
+} from '../import/csv-import-service.js'
 
 const selectedCsvFilePathsById = new Map<string, string>()
 
@@ -91,6 +98,51 @@ const isImportCsvFilesInput = (input: unknown): input is ImportCsvFilesInput => 
   )
 }
 
+const isPreviewCsvFileInput = (input: unknown): input is PreviewCsvFileInput => {
+  if (typeof input !== 'object' || input === null || !('selectionId' in input)) {
+    return false
+  }
+
+  return typeof (input as { readonly selectionId: unknown }).selectionId === 'string'
+}
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim().length > 0
+
+const isManualCsvDateFormat = (value: unknown): boolean =>
+  value === undefined || value === 'dd.mm.yyyy' || value === 'mm/dd/yyyy' || value === 'yyyy-mm-dd'
+
+const isImportCsvFileWithMappingInput = (
+  input: unknown,
+): input is ImportCsvFileWithMappingInput => {
+  if (typeof input !== 'object' || input === null || !('selectionId' in input) || !('mapping' in input)) {
+    return false
+  }
+
+  const candidate = input as {
+    readonly mapping: unknown
+    readonly selectionId: unknown
+  }
+  const mapping = candidate.mapping as
+    | Partial<Record<keyof ImportCsvFileWithMappingInput['mapping'], unknown>>
+    | null
+
+  if (typeof mapping !== 'object' || mapping === null) {
+    return false
+  }
+
+  const hasCurrencyFallback = isNonEmptyString(mapping.currencyColumn) || isNonEmptyString(mapping.fixedCurrency)
+
+  return (
+    isNonEmptyString(candidate.selectionId) &&
+    isNonEmptyString(mapping.amountColumn) &&
+    isNonEmptyString(mapping.dateColumn) &&
+    isManualCsvDateFormat(mapping.dateFormat) &&
+    isNonEmptyString(mapping.descriptionColumn) &&
+    hasCurrencyFallback
+  )
+}
+
 const isString = (value: string | undefined): value is string => typeof value === 'string'
 
 export function registerImportIpcHandlers(): void {
@@ -153,6 +205,66 @@ export function registerImportIpcHandlers(): void {
       const files = filePaths.map((filePath) => ({ filePath }))
 
       return importCsvFiles({ database, files })
+    },
+  )
+
+  ipcMain.handle(
+    importIpcChannels.importCsvFileWithMapping,
+    async (_event, input: unknown): Promise<ImportCsvFilesResult> => {
+      const database = getActiveProjectDatabase()
+
+      if (!database) {
+        return {
+          ok: false,
+          code: 'project-not-open',
+          message: 'Open or create a project before importing CSV files.',
+        }
+      }
+
+      if (!isImportCsvFileWithMappingInput(input)) {
+        return {
+          ok: false,
+          code: 'invalid-csv-import-input',
+          message: 'Map date, description, amount, and currency before importing.',
+        }
+      }
+
+      const filePath = getSelectedCsvFilePath(input.selectionId)
+
+      if (!filePath) {
+        return {
+          ok: false,
+          code: 'selected-csv-file-not-found',
+          message: 'Selected CSV file is no longer available. Select it again before importing.',
+        }
+      }
+
+      return importCsvFileWithMapping({ database, filePath, mapping: input.mapping })
+    },
+  )
+
+  ipcMain.handle(
+    importIpcChannels.previewCsvFile,
+    async (_event, input: unknown): Promise<PreviewCsvFileResult> => {
+      if (!isPreviewCsvFileInput(input)) {
+        return {
+          ok: false,
+          code: 'invalid-csv-preview-input',
+          message: 'Select one CSV file before previewing its columns.',
+        }
+      }
+
+      const filePath = getSelectedCsvFilePath(input.selectionId)
+
+      if (!filePath) {
+        return {
+          ok: false,
+          code: 'selected-csv-file-not-found',
+          message: 'Selected CSV file is no longer available. Select it again before previewing.',
+        }
+      }
+
+      return previewCsvFile({ filePath })
     },
   )
 

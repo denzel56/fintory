@@ -20,6 +20,26 @@ export type ImportCsvFilesInput = {
   readonly selectionIds: readonly string[]
 }
 
+export type ManualCsvDateFormat = 'dd.mm.yyyy' | 'mm/dd/yyyy' | 'yyyy-mm-dd'
+
+export type ManualCsvColumnMapping = {
+  readonly amountColumn: string
+  readonly currencyColumn?: string
+  readonly dateColumn: string
+  readonly dateFormat?: ManualCsvDateFormat
+  readonly descriptionColumn: string
+  readonly fixedCurrency?: string
+}
+
+export type PreviewCsvFileInput = {
+  readonly selectionId: string
+}
+
+export type ImportCsvFileWithMappingInput = {
+  readonly mapping: ManualCsvColumnMapping
+  readonly selectionId: string
+}
+
 export type ImportCsvFileSummaryDto = {
   readonly adapterId: string
   readonly diagnostics: readonly ImportDiagnosticDto[]
@@ -56,6 +76,31 @@ export type ImportCsvFilesResult =
         | 'selected-csv-file-not-found'
       readonly message: string
     }
+
+export type PreviewCsvColumnDto = {
+  readonly header: string
+  readonly nonEmptyCount: number
+}
+
+export type PreviewCsvFileResult =
+  | {
+      readonly ok: true
+      readonly columns: readonly PreviewCsvColumnDto[]
+      readonly detectedAdapterId: string | null
+      readonly fileName: string
+      readonly headers: readonly string[]
+      readonly rowCount: number
+    }
+  | {
+      readonly ok: false
+      readonly code:
+        | 'csv-preview-failed'
+        | 'invalid-csv-preview-input'
+        | 'selected-csv-file-not-found'
+      readonly message: string
+    }
+
+export type ImportCsvFileWithMappingResult = ImportCsvFilesResult
 
 export type ClearImportHistoryResult =
   | {

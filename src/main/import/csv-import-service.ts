@@ -4,16 +4,26 @@ import { basename } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import type {
   ImportCsvFileSummaryDto,
+  ImportCsvFileWithMappingInput,
   ImportCsvFilesResult,
   ImportDiagnosticDto,
+  PreviewCsvColumnDto,
+  PreviewCsvFileResult,
 } from '../../shared/types/import.js'
 import { createImportBatchesRepository } from '../db/repositories/import-batches-repository.js'
 import { createTransactionsRepository } from '../db/repositories/transactions-repository.js'
 import { runInTransaction } from '../db/transactions.js'
 import { parseCsvText } from './csv-parser.js'
 import { createTransactionSourceHashes } from './source-hash.js'
+import type { TransactionSourceHash } from './source-hash.js'
+import type { TransactionDraft } from './transaction-draft.js'
 import { genericCsvImportAdapter } from './adapters/generic-csv-import-adapter.js'
 import type { CsvImportAdapter, CsvImportAdapterError } from './adapters/csv-import-adapter.js'
+import {
+  manualCsvMappingAdapterId,
+  normalizeRowsWithManualMapping,
+} from './adapters/manual-csv-mapping-adapter.js'
+import type { CsvParseResult } from './csv-parser.js'
 
 export type CsvImportFileInput = {
   readonly filePath: string
@@ -52,6 +62,14 @@ const getFailedRowCount = (errors: readonly { readonly rowNumber?: number }[]): 
 
 const getImportAdapter = (headers: readonly string[]): CsvImportAdapter | null =>
   csvImportAdapters.find((adapter) => adapter.canHandle(headers)) ?? null
+
+const getPreviewColumns = (parseResult: CsvParseResult): readonly PreviewCsvColumnDto[] => {
+  return parseResult.headers.map((header) => ({
+    header,
+    nonEmptyCount: parseResult.rows.filter((row) => (row.values[header] ?? '').trim().length > 0)
+      .length,
+  }))
+}
 
 const diagnosticRowNumberLimit = 10
 
@@ -150,6 +168,122 @@ const createFailedBatch = (input: {
   }
 }
 
+const createImportBatchFromAdapterResult = (input: {
+  readonly adapterId: string
+  readonly database: DatabaseSync
+  readonly diagnostics: readonly ImportDiagnosticDto[]
+  readonly draftItems: readonly TransactionSourceHash[]
+  readonly failedCount: number
+  readonly fileName: string
+  readonly rowCount: number
+  readonly sourceFileHash: string
+}): ImportCsvFileSummaryDto => {
+  const batchId = randomUUID()
+  const importedAt = new Date().toISOString()
+  const importBatchesRepository = createImportBatchesRepository(input.database)
+  const transactionsRepository = createTransactionsRepository(input.database)
+  let insertedCount = 0
+
+  importBatchesRepository.insert({
+    adapterId: input.adapterId,
+    duplicateCount: 0,
+    failedCount: input.failedCount,
+    id: batchId,
+    importedAt,
+    insertedCount: 0,
+    rowCount: input.rowCount,
+    sourceFileHash: input.sourceFileHash,
+    sourceFileName: input.fileName,
+  })
+
+  for (const item of input.draftItems) {
+    const wasInserted = transactionsRepository.insertIfSourceHashIsNew({
+      amountMinor: item.draft.amountMinor,
+      categoryId: null,
+      createdAt: importedAt,
+      currency: item.draft.currency,
+      description: item.draft.description,
+      direction: item.draft.direction,
+      id: randomUUID(),
+      importBatchId: batchId,
+      merchant: item.draft.merchant,
+      rawDescription: item.draft.rawDescription,
+      sourceHash: item.sourceHash,
+      transactionDate: item.draft.transactionDate,
+      updatedAt: importedAt,
+    })
+
+    if (wasInserted) {
+      insertedCount += 1
+    }
+  }
+
+  const duplicateCount = input.draftItems.length - insertedCount
+
+  importBatchesRepository.updateCounts({
+    duplicateCount,
+    failedCount: input.failedCount,
+    id: batchId,
+    insertedCount,
+    rowCount: input.rowCount,
+  })
+
+  return {
+    adapterId: input.adapterId,
+    diagnostics: input.diagnostics,
+    duplicateCount,
+    failedCount: input.failedCount,
+    fileName: input.fileName,
+    insertedCount,
+    rowCount: input.rowCount,
+  }
+}
+
+const importParsedCsvFile = (input: {
+  readonly adapterId: string
+  readonly adapterResult: {
+    readonly drafts: readonly TransactionDraft[]
+    readonly errors: readonly CsvImportAdapterError[]
+  }
+  readonly database: DatabaseSync
+  readonly fileName: string
+  readonly sourceHashAdapterId?: string
+  readonly sourceFileHash: string
+}): ImportCsvFileSummaryDto => {
+  const failedCount = getFailedRowCount(input.adapterResult.errors)
+  const diagnostics = toImportDiagnostics(input.adapterResult.errors)
+  const rowCount = getImportRowCount({
+    draftCount: input.adapterResult.drafts.length,
+    failedCount,
+  })
+
+  if (input.adapterResult.drafts.length === 0) {
+    return createFailedBatch({
+      adapterId: input.adapterId,
+      database: input.database,
+      diagnostics,
+      failedCount,
+      fileName: input.fileName,
+      rowCount,
+      sourceFileHash: input.sourceFileHash,
+    })
+  }
+
+  return createImportBatchFromAdapterResult({
+    adapterId: input.adapterId,
+    database: input.database,
+    diagnostics,
+    draftItems: createTransactionSourceHashes(
+      input.sourceHashAdapterId ?? input.adapterId,
+      input.adapterResult.drafts,
+    ),
+    failedCount,
+    fileName: input.fileName,
+    rowCount,
+    sourceFileHash: input.sourceFileHash,
+  })
+}
+
 const importCsvFile = async (
   database: DatabaseSync,
   file: CsvImportFileInput,
@@ -197,86 +331,77 @@ const importCsvFile = async (
       })
     }
 
-    const adapterResult = adapter.normalizeRows(parseResult)
-    const failedCount = getFailedRowCount(adapterResult.errors)
-    const diagnostics = toImportDiagnostics(adapterResult.errors)
-    const rowCount = getImportRowCount({
-      draftCount: adapterResult.drafts.length,
-      failedCount,
-    })
-
-    if (adapterResult.drafts.length === 0) {
-      return createFailedBatch({
-        adapterId: adapter.id,
-        database,
-        diagnostics,
-        failedCount,
-        fileName,
-        rowCount,
-        sourceFileHash,
-      })
-    }
-
-    const batchId = randomUUID()
-    const importedAt = new Date().toISOString()
-    const importBatchesRepository = createImportBatchesRepository(database)
-    const transactionsRepository = createTransactionsRepository(database)
-    let insertedCount = 0
-
-    importBatchesRepository.insert({
+    return importParsedCsvFile({
       adapterId: adapter.id,
-      duplicateCount: 0,
-      failedCount,
-      id: batchId,
-      importedAt,
-      insertedCount: 0,
-      rowCount,
+      adapterResult: adapter.normalizeRows(parseResult),
+      database,
+      fileName,
       sourceFileHash,
-      sourceFileName: fileName,
     })
+  })
+}
 
-    for (const item of createTransactionSourceHashes(adapter.id, adapterResult.drafts)) {
-      const wasInserted = transactionsRepository.insertIfSourceHashIsNew({
-        amountMinor: item.draft.amountMinor,
-        categoryId: null,
-        createdAt: importedAt,
-        currency: item.draft.currency,
-        description: item.draft.description,
-        direction: item.draft.direction,
-        id: randomUUID(),
-        importBatchId: batchId,
-        merchant: item.draft.merchant,
-        rawDescription: item.draft.rawDescription,
-        sourceHash: item.sourceHash,
-        transactionDate: item.draft.transactionDate,
-        updatedAt: importedAt,
-      })
-
-      if (wasInserted) {
-        insertedCount += 1
-      }
-    }
-
-    const duplicateCount = adapterResult.drafts.length - insertedCount
-
-    importBatchesRepository.updateCounts({
-      duplicateCount,
-      failedCount,
-      id: batchId,
-      insertedCount,
-      rowCount,
-    })
+export const previewCsvFile = async (file: CsvImportFileInput): Promise<PreviewCsvFileResult> => {
+  try {
+    const fileContent = await readFile(file.filePath)
+    const parseResult = parseCsvText(fileContent.toString('utf8'), { encoding: 'utf8' })
+    const adapter = getImportAdapter(parseResult.headers)
 
     return {
-      adapterId: adapter.id,
-      diagnostics,
-      duplicateCount,
-      failedCount,
-      fileName,
-      insertedCount,
-      rowCount,
+      ok: true,
+      columns: getPreviewColumns(parseResult),
+      detectedAdapterId: adapter?.id ?? null,
+      fileName: basename(file.filePath),
+      headers: parseResult.headers,
+      rowCount: parseResult.rows.length + getFailedRowCount(parseResult.errors),
     }
-  })
+  } catch {
+    return {
+      ok: false,
+      code: 'csv-preview-failed',
+      message: 'CSV file could not be previewed right now.',
+    }
+  }
+}
+
+export const importCsvFileWithMapping = async ({
+  database,
+  filePath,
+  mapping,
+}: {
+  readonly database: DatabaseSync
+  readonly filePath: string
+  readonly mapping: ImportCsvFileWithMappingInput['mapping']
+}): Promise<ImportCsvFilesResult> => {
+  try {
+    const fileContent = await readFile(filePath)
+    const sourceFileHash = getFileHash(fileContent)
+    const fileName = basename(filePath)
+    const parseResult: CsvParseResult = parseCsvText(fileContent.toString('utf8'), { encoding: 'utf8' })
+
+    const summary = runInTransaction(database, () =>
+      importParsedCsvFile({
+        adapterId: manualCsvMappingAdapterId,
+        adapterResult: normalizeRowsWithManualMapping(parseResult, mapping),
+        database,
+        fileName,
+        sourceHashAdapterId: genericCsvImportAdapter.id,
+        sourceFileHash,
+      }),
+    )
+
+    return {
+      ok: true,
+      files: [summary],
+      ...toTotalSummary([summary]),
+    }
+  } catch {
+    return {
+      ok: false,
+      code: 'csv-import-failed',
+      message: 'CSV file could not be imported with the selected mapping right now.',
+    }
+  }
 }
 
 export const importCsvFiles = async ({
