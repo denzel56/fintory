@@ -5,6 +5,7 @@ import {
   Group,
   List,
   Loader,
+  Modal,
   SimpleGrid,
   Stack,
   Table,
@@ -44,6 +45,12 @@ type CsvImportState =
   | { readonly status: 'idle' }
   | { readonly status: 'importing' }
   | { readonly status: 'success'; readonly result: ImportSuccessResult }
+  | { readonly status: 'error'; readonly message: string }
+
+type ClearImportHistoryState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'clearing' }
+  | { readonly status: 'success'; readonly clearedCount: number }
   | { readonly status: 'error'; readonly message: string }
 
 const formatFileSize = (sizeBytes: number): string => {
@@ -120,13 +127,19 @@ export function ImportPage() {
   const [importBatchesLoadState, setImportBatchesLoadState] =
     useState<ImportBatchesLoadState>({ status: 'loading' })
   const [csvImportState, setCsvImportState] = useState<CsvImportState>({ status: 'idle' })
+  const [clearImportHistoryState, setClearImportHistoryState] =
+    useState<ClearImportHistoryState>({ status: 'idle' })
+  const [isClearHistoryModalOpen, setIsClearHistoryModalOpen] = useState(false)
   const isSelecting = csvSelectionState.status === 'selecting'
   const selectedFiles = csvSelectionState.files
   const importBatches =
     importBatchesLoadState.status === 'loaded' ? importBatchesLoadState.batches : []
   const isImportHistoryLoading = importBatchesLoadState.status === 'loading'
   const isImporting = csvImportState.status === 'importing'
+  const isClearingImportHistory = clearImportHistoryState.status === 'clearing'
   const canImportSelectedFiles = selectedFiles.length > 0 && !isSelecting && !isImporting
+  const canClearImportHistory =
+    importBatches.length > 0 && !isImportHistoryLoading && !isClearingImportHistory
 
   const loadImportBatches = async () => {
     setImportBatchesLoadState({ status: 'loading' })
@@ -230,6 +243,38 @@ export function ImportPage() {
     }
   }
 
+  const handleClearImportHistory = async () => {
+    if (!window.fintory) {
+      setClearImportHistoryState({
+        status: 'error',
+        message: 'The Electron preload bridge is not available in this runtime.',
+      })
+      return
+    }
+
+    setClearImportHistoryState({ status: 'clearing' })
+
+    try {
+      const result = await window.fintory.import.clearHistory()
+
+      if (!result.ok) {
+        setIsClearHistoryModalOpen(false)
+        setClearImportHistoryState({ status: 'error', message: result.message })
+        return
+      }
+
+      setIsClearHistoryModalOpen(false)
+      setClearImportHistoryState({ status: 'success', clearedCount: result.clearedCount })
+      await loadImportBatches()
+    } catch {
+      setIsClearHistoryModalOpen(false)
+      setClearImportHistoryState({
+        status: 'error',
+        message: 'Import history could not be cleared right now.',
+      })
+    }
+  }
+
   const selectedFileItems = selectedFiles.map((file) => (
     <List.Item key={file.selectionId}>
       <Text fw={600} span>
@@ -304,7 +349,38 @@ export function ImportPage() {
   const importResultAlertColor = hasImportedTransactions && !hasImportFailures ? 'green' : 'yellow'
 
   return (
-    <Card padding="xl" radius="lg" withBorder>
+    <>
+      <Modal
+        centered
+        opened={isClearHistoryModalOpen}
+        title="Clear import history?"
+        onClose={() => setIsClearHistoryModalOpen(false)}
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            This removes saved import batch records for the active project. Imported
+            transactions stay in the local database.
+          </Text>
+          <Group justify="flex-end">
+            <Button
+              disabled={isClearingImportHistory}
+              variant="default"
+              onClick={() => setIsClearHistoryModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              loading={isClearingImportHistory}
+              onClick={() => void handleClearImportHistory()}
+            >
+              Clear history
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Card padding="xl" radius="lg" withBorder>
       <Stack gap="md">
         <Group align="flex-start" justify="space-between">
           <Stack gap={4}>
@@ -460,21 +536,46 @@ export function ImportPage() {
 
         <Card padding="lg" radius="md" withBorder>
           <Stack gap="md">
-            <Group justify="space-between">
+            <Group align="flex-start" justify="space-between">
               <Stack gap={4}>
                 <Text fw={700}>Import history</Text>
                 <Text c="dimmed" size="sm">
                   Review CSV import batches already stored in the active local project.
                 </Text>
               </Stack>
-              <Button
-                loading={isImportHistoryLoading}
-                variant="light"
-                onClick={() => void loadImportBatches()}
-              >
-                Refresh history
-              </Button>
+              <Group>
+                <Button
+                  disabled={isClearingImportHistory}
+                  loading={isImportHistoryLoading}
+                  variant="light"
+                  onClick={() => void loadImportBatches()}
+                >
+                  Refresh history
+                </Button>
+                <Button
+                  color="red"
+                  disabled={!canClearImportHistory}
+                  loading={isClearingImportHistory}
+                  variant="light"
+                  onClick={() => setIsClearHistoryModalOpen(true)}
+                >
+                  Clear history
+                </Button>
+              </Group>
             </Group>
+
+            {clearImportHistoryState.status === 'success' ? (
+              <Alert color="green" title="Import history cleared">
+                Removed {clearImportHistoryState.clearedCount} import batch record(s).
+                Imported transactions were preserved.
+              </Alert>
+            ) : null}
+
+            {clearImportHistoryState.status === 'error' ? (
+              <Alert color="yellow" title="Import history not cleared">
+                {clearImportHistoryState.message}
+              </Alert>
+            ) : null}
 
             {importBatchesLoadState.status === 'error' ? (
               <Alert color="yellow" title="Import history unavailable">
@@ -524,6 +625,7 @@ export function ImportPage() {
           </Stack>
         </Card>
       </Stack>
-    </Card>
+      </Card>
+    </>
   )
 }

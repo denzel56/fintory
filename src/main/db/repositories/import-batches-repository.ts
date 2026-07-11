@@ -45,6 +45,7 @@ type ImportBatchRow = {
 }
 
 export type ImportBatchesRepository = {
+  readonly clear: () => number
   readonly count: () => number
   readonly findById: (id: string) => ImportBatchRecord | null
   readonly insert: (input: CreateImportBatchInput) => void
@@ -68,6 +69,12 @@ export function createImportBatchesRepository(
   database: DatabaseSync,
 ): ImportBatchesRepository {
   return {
+    clear: () => {
+      database.prepare('UPDATE transactions SET import_batch_id = NULL').run()
+      const result = database.prepare('DELETE FROM import_batches').run()
+
+      return Number(result.changes)
+    },
     count: () => {
       const row = database.prepare('SELECT COUNT(*) AS count FROM import_batches').get() as
         | { count: number }
