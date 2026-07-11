@@ -27,3 +27,13 @@ When a new non-urgent problem is discovered during implementation or review, add
 - **Data policy:** clearing import history must not delete transactions; existing `transactions.import_batch_id` should become `NULL` through the schema's `ON DELETE SET NULL` behavior or an explicit safe update/delete transaction.
 - **Privacy:** do not log file names, transaction data, CSV contents, or local paths during the clear action.
 - **Verification:** import CSV -> confirm history row appears -> clear history -> confirm history is empty -> confirm Transactions page still shows imported transactions.
+
+### Improve manual CSV import direction and category handling
+
+- **Status:** open
+- **Priority:** high
+- **Area:** CSV import / transactions / categories
+- **Context:** Manual CSV import currently derives transaction direction only from the signed amount: negative values become `expense`, positive values become `income`. Bank exports that store expenses as positive values, or use a separate debit/credit/direction column, can import every transaction as `income`. Imported transactions are also written with `category_id = NULL`, so categories are not determined during import.
+- **Scope:** add manual import options for direction mapping, such as signed amount, positive-is-expense, or a direction/debit-credit column. Add tests/smoke coverage for positive expense formats. Separately add category assignment support and consider minimal safe defaults (`income` -> Income, `expense` -> Other) before adding keyword-based auto-categorization.
+- **Privacy:** do not expose raw CSV rows, local file paths, account numbers, or transaction contents in logs or renderer diagnostics.
+- **Verification:** import a CSV with positive expense amounts and confirm directions are correct; confirm imported transactions can be assigned categories and persist after reload/reopen; run `npm run smoke:csv-import`, `npm run build`, and `npm run lint`.
