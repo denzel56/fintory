@@ -143,6 +143,14 @@ const normalizeColumnName = (columnName: string): string => columnName.trim().to
 const isManualCsvDateFormat = (value: unknown): boolean =>
   value === undefined || value === 'dd.mm.yyyy' || value === 'mm/dd/yyyy' || value === 'yyyy-mm-dd'
 
+const isOptionalString = (value: unknown): value is string | undefined => {
+  return value === undefined || typeof value === 'string'
+}
+
+const isValidFixedCurrency = (value: unknown): value is string | undefined => {
+  return value === undefined || (typeof value === 'string' && /^[A-Za-z]{3}$/.test(value.trim()))
+}
+
 const isManualCsvColumnMapping = (
   value: unknown,
 ): value is ImportCsvFileWithMappingInput['mapping'] => {
@@ -165,6 +173,8 @@ const isManualCsvColumnMapping = (
     isNonEmptyString(mapping.dateColumn) &&
     isManualCsvDateFormat(mapping.dateFormat) &&
     isNonEmptyString(mapping.descriptionColumn) &&
+    isOptionalString(mapping.currencyColumn) &&
+    isValidFixedCurrency(mapping.fixedCurrency) &&
     hasCurrencyFallback
   )
 }
