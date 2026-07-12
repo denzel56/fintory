@@ -15,10 +15,12 @@ const categoriesIpcChannels = {
 
 const importIpcChannels = {
   clearHistory: 'import:clearHistory',
+  findCsvMappingProfiles: 'import:findCsvMappingProfiles',
   importCsvFileWithMapping: 'import:importCsvFileWithMapping',
   importCsvFiles: 'import:importCsvFiles',
   listBatches: 'import:listBatches',
   previewCsvFile: 'import:previewCsvFile',
+  saveCsvMappingProfile: 'import:saveCsvMappingProfile',
   selectCsvFiles: 'import:selectCsvFiles',
 } as const
 
@@ -46,11 +48,15 @@ const fintoryApi: FintoryApi = {
   },
   import: {
     clearHistory: () => ipcRenderer.invoke(importIpcChannels.clearHistory),
+    findCsvMappingProfiles: (input) =>
+      ipcRenderer.invoke(importIpcChannels.findCsvMappingProfiles, input),
     importCsvFileWithMapping: (input) =>
       ipcRenderer.invoke(importIpcChannels.importCsvFileWithMapping, input),
     importCsvFiles: (input) => ipcRenderer.invoke(importIpcChannels.importCsvFiles, input),
     listBatches: () => ipcRenderer.invoke(importIpcChannels.listBatches),
     previewCsvFile: (input) => ipcRenderer.invoke(importIpcChannels.previewCsvFile, input),
+    saveCsvMappingProfile: (input) =>
+      ipcRenderer.invoke(importIpcChannels.saveCsvMappingProfile, input),
     selectCsvFiles: () => ipcRenderer.invoke(importIpcChannels.selectCsvFiles),
   },
   project: {
