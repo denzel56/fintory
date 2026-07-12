@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { runProjectDatabaseMigrations } from '../db/migrations/project-database-migrations.js'
+import { createCsvMappingProfilesRepository } from '../db/repositories/csv-mapping-profiles-repository.js'
 import { createImportBatchesRepository } from '../db/repositories/import-batches-repository.js'
 import { createTransactionsRepository } from '../db/repositories/transactions-repository.js'
 import { importCsvFileWithMapping, importCsvFiles, previewCsvFile } from './csv-import-service.js'
@@ -19,6 +20,7 @@ export type CsvImportSmokeResult = {
   readonly manualImportFailedCount: number
   readonly manualImportInsertedCount: number
   readonly manualPreviewDescriptionNonEmptyCount: number
+  readonly manualPreviewDetectedMappingProfileCount: number
   readonly manualPreviewHeaderCount: number
   readonly secondImportDuplicateCount: number
   readonly secondImportFailedCount: number
@@ -68,7 +70,23 @@ export const runCsvImportSmokeCheck = async (): Promise<CsvImportSmokeResult> =>
         descriptionColumn: 'description',
       },
     })
-    const manualPreview = await previewCsvFile({ filePath: manualCsvFilePath })
+    createCsvMappingProfilesRepository(database).create({
+      createdAt: '2026-07-12T00:00:00.000Z',
+      headers: ['posted', 'memo', 'total', 'ccy'],
+      id: 'csv-import-smoke-mapping-profile',
+      mapping: {
+        amountColumn: 'total',
+        currencyColumn: 'ccy',
+        dateColumn: 'posted',
+        dateFormat: 'dd.mm.yyyy',
+        descriptionColumn: 'memo',
+        fixedCurrency: 'USD',
+      },
+      name: 'Smoke test mapping',
+      updatedAt: '2026-07-12T00:00:00.000Z',
+    })
+
+    const manualPreview = await previewCsvFile({ database, filePath: manualCsvFilePath })
     const manualImport = await importCsvFileWithMapping({
       database,
       filePath: manualCsvFilePath,
@@ -105,6 +123,7 @@ export const runCsvImportSmokeCheck = async (): Promise<CsvImportSmokeResult> =>
       manualImportInsertedCount: manualImport.insertedCount,
       manualPreviewDescriptionNonEmptyCount:
         manualPreview.columns.find((column) => column.header === 'memo')?.nonEmptyCount ?? 0,
+      manualPreviewDetectedMappingProfileCount: manualPreview.detectedMappingProfiles.length,
       manualPreviewHeaderCount: manualPreview.headers.length,
       secondImportDuplicateCount: secondImport.duplicateCount,
       secondImportFailedCount: secondImport.failedCount,

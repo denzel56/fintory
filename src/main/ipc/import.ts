@@ -400,7 +400,7 @@ export function registerImportIpcHandlers(): void {
         }
       }
 
-      return previewCsvFile({ filePath })
+      return previewCsvFile({ database: getActiveProjectDatabase() ?? undefined, filePath })
     },
   )
 

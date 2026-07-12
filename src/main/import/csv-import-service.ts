@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import type {
+  CsvMappingProfileDto,
   ImportCsvFileSummaryDto,
   ImportCsvFileWithMappingInput,
   ImportCsvFilesResult,
@@ -10,6 +11,8 @@ import type {
   PreviewCsvColumnDto,
   PreviewCsvFileResult,
 } from '../../shared/types/import.js'
+import { createCsvMappingProfilesRepository } from '../db/repositories/csv-mapping-profiles-repository.js'
+import type { CsvMappingProfileRecord } from '../db/repositories/csv-mapping-profiles-repository.js'
 import { createImportBatchesRepository } from '../db/repositories/import-batches-repository.js'
 import { createTransactionsRepository } from '../db/repositories/transactions-repository.js'
 import { runInTransaction } from '../db/transactions.js'
@@ -27,6 +30,10 @@ import type { CsvParseResult } from './csv-parser.js'
 
 export type CsvImportFileInput = {
   readonly filePath: string
+}
+
+export type CsvPreviewFileInput = CsvImportFileInput & {
+  readonly database?: DatabaseSync
 }
 
 export type ImportCsvFilesInput = {
@@ -69,6 +76,29 @@ const getPreviewColumns = (parseResult: CsvParseResult): readonly PreviewCsvColu
     nonEmptyCount: parseResult.rows.filter((row) => (row.values[header] ?? '').trim().length > 0)
       .length,
   }))
+}
+
+const toCsvMappingProfileDto = (profile: CsvMappingProfileRecord): CsvMappingProfileDto => ({
+  createdAt: profile.createdAt,
+  headerFingerprint: profile.headerFingerprint,
+  headers: profile.headers,
+  id: profile.id,
+  mapping: profile.mapping,
+  name: profile.name,
+  updatedAt: profile.updatedAt,
+})
+
+const findDetectedMappingProfiles = (
+  database: DatabaseSync | undefined,
+  headers: readonly string[],
+): readonly CsvMappingProfileDto[] => {
+  if (!database) {
+    return []
+  }
+
+  return createCsvMappingProfilesRepository(database)
+    .findByHeaders(headers)
+    .map(toCsvMappingProfileDto)
 }
 
 const diagnosticRowNumberLimit = 10
@@ -341,7 +371,7 @@ const importCsvFile = async (
   })
 }
 
-export const previewCsvFile = async (file: CsvImportFileInput): Promise<PreviewCsvFileResult> => {
+export const previewCsvFile = async (file: CsvPreviewFileInput): Promise<PreviewCsvFileResult> => {
   try {
     const fileContent = await readFile(file.filePath)
     const parseResult = parseCsvText(fileContent.toString('utf8'), { encoding: 'utf8' })
@@ -351,6 +381,7 @@ export const previewCsvFile = async (file: CsvImportFileInput): Promise<PreviewC
       ok: true,
       columns: getPreviewColumns(parseResult),
       detectedAdapterId: adapter?.id ?? null,
+      detectedMappingProfiles: findDetectedMappingProfiles(file.database, parseResult.headers),
       fileName: basename(file.filePath),
       headers: parseResult.headers,
       rowCount: parseResult.rows.length + getFailedRowCount(parseResult.errors),

@@ -107,6 +107,7 @@ export type PreviewCsvFileResult =
       readonly ok: true
       readonly columns: readonly PreviewCsvColumnDto[]
       readonly detectedAdapterId: string | null
+      readonly detectedMappingProfiles: readonly CsvMappingProfileDto[]
       readonly fileName: string
       readonly headers: readonly string[]
       readonly rowCount: number
