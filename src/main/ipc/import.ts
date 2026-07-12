@@ -148,7 +148,7 @@ const isOptionalString = (value: unknown): value is string | undefined => {
 }
 
 const isValidFixedCurrency = (value: unknown): value is string | undefined => {
-  return value === undefined || (typeof value === 'string' && /^[A-Za-z]{3}$/.test(value.trim()))
+  return value === undefined || (typeof value === 'string' && (value.trim().length === 0 || /^[A-Za-z]{3}$/.test(value.trim())))
 }
 
 const isManualCsvColumnMapping = (
