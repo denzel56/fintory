@@ -103,6 +103,28 @@ const projectDatabaseMigrations: readonly ProjectDatabaseMigration[] = [
       `)
     },
   },
+  {
+    id: '0004_csv_mapping_profiles',
+    version: 4,
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS csv_mapping_profiles (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          header_fingerprint TEXT NOT NULL,
+          headers_json TEXT NOT NULL,
+          mapping_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_csv_mapping_profiles_header_fingerprint
+          ON csv_mapping_profiles(header_fingerprint);
+
+        PRAGMA user_version = 4;
+      `)
+    },
+  },
 ]
 
 const ensureMigrationMetadataTable = (database: DatabaseSync): void => {

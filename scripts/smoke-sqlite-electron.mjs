@@ -25,13 +25,13 @@ try {
     throw new Error('SQLite smoke check returned an unexpected value.')
   }
 
-  if (result.migrationVersion !== 3 || result.appliedMigrationCount !== 3) {
+  if (result.migrationVersion !== 4 || result.appliedMigrationCount !== 4) {
     throw new Error('SQLite migration smoke check returned an unexpected version.')
   }
 
   if (
-    result.coreSchemaTableCount !== 4 ||
-    result.coreSchemaIndexCount !== 7 ||
+    result.coreSchemaTableCount !== 5 ||
+    result.coreSchemaIndexCount !== 8 ||
     result.coreSchemaRowCount !== 0
   ) {
     throw new Error('SQLite core schema smoke check returned an unexpected schema.')
@@ -47,6 +47,10 @@ try {
 
   if (!result.transactionSourceHashUniquePassed) {
     throw new Error('SQLite transaction source hash uniqueness smoke check returned an unexpected result.')
+  }
+
+  if (!result.csvMappingProfilesSmokePassed) {
+    throw new Error('SQLite CSV mapping profiles smoke check returned an unexpected result.')
   }
 
   if (result.seededCategoryCount <= 0) {
