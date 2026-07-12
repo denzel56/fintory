@@ -60,6 +60,8 @@ type ClearImportHistoryState =
 
 type ManualCsvPreview = Extract<PreviewCsvFileResult, { readonly ok: true }>
 
+type DetectedMappingProfile = ManualCsvPreview['detectedMappingProfiles'][number]
+
 type ManualMappingPreviewState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading' }
@@ -115,6 +117,35 @@ const createEmptyManualMapping = (): ManualCsvColumnMapping => ({
   dateFormat: 'yyyy-mm-dd',
   descriptionColumn: '',
   fixedCurrency: '',
+})
+
+const normalizeColumnName = (columnName: string): string => columnName.trim().toLowerCase()
+
+const getPreviewHeaderForSavedColumn = (
+  preview: ManualCsvPreview,
+  columnName: string | undefined,
+): string | undefined => {
+  if (!columnName) {
+    return undefined
+  }
+
+  return (
+    preview.headers.find(
+      (header) => normalizeColumnName(header) === normalizeColumnName(columnName),
+    ) ?? columnName
+  )
+}
+
+const getManualMappingFromDetectedProfile = (
+  profile: DetectedMappingProfile,
+  preview: ManualCsvPreview,
+): ManualCsvColumnMapping => ({
+  amountColumn: getPreviewHeaderForSavedColumn(preview, profile.mapping.amountColumn) ?? '',
+  currencyColumn: getPreviewHeaderForSavedColumn(preview, profile.mapping.currencyColumn) ?? '',
+  dateColumn: getPreviewHeaderForSavedColumn(preview, profile.mapping.dateColumn) ?? '',
+  dateFormat: profile.mapping.dateFormat ?? 'yyyy-mm-dd',
+  descriptionColumn: getPreviewHeaderForSavedColumn(preview, profile.mapping.descriptionColumn) ?? '',
+  fixedCurrency: profile.mapping.fixedCurrency ?? '',
 })
 
 const manualDateFormatOptions: readonly { readonly label: string; readonly value: ManualCsvDateFormat }[] = [
@@ -333,6 +364,12 @@ export function ImportPage() {
         return
       }
 
+      const [detectedMappingProfile] = result.detectedMappingProfiles
+
+      if (detectedMappingProfile) {
+        setManualMapping(getManualMappingFromDetectedProfile(detectedMappingProfile, result))
+      }
+
       setManualMappingPreviewState({ status: 'ready', preview: result })
     } catch {
       setManualMappingPreviewState({
@@ -503,6 +540,7 @@ export function ImportPage() {
       label: `${column.header} (${column.nonEmptyCount}/${manualPreview.rowCount} non-empty)`,
       value: column.header,
     })) ?? []
+  const detectedMappingProfile = manualPreview?.detectedMappingProfiles[0] ?? null
 
   return (
     <>
@@ -639,6 +677,12 @@ export function ImportPage() {
                       : 'No built-in adapter was detected. Map the required columns below.'}{' '}
                     Rows found: {manualPreview.rowCount}.
                   </Alert>
+
+                  {detectedMappingProfile ? (
+                    <Alert color="green" title="Saved mapping applied">
+                      Using saved mapping: {detectedMappingProfile.name}. Review the columns below before importing.
+                    </Alert>
+                  ) : null}
 
                   <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
                     <Select

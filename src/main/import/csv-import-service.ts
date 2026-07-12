@@ -96,9 +96,13 @@ const findDetectedMappingProfiles = (
     return []
   }
 
-  return createCsvMappingProfilesRepository(database)
-    .findByHeaders(headers)
-    .map(toCsvMappingProfileDto)
+  try {
+    return createCsvMappingProfilesRepository(database)
+      .findByHeaders(headers)
+      .map(toCsvMappingProfileDto)
+  } catch {
+    return []
+  }
 }
 
 const diagnosticRowNumberLimit = 10
