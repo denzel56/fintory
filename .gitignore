@@ -60,6 +60,9 @@ coverage
 .opencode/bun.lock
 .opencode/.gitignore
 
+# Local docs drafts
+/docs
+
 # Local workflow notes
 ISSUE_WORKFLOW.local.md
 
