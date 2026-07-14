@@ -60,10 +60,18 @@ type ClearImportHistoryState =
 
 type ManualCsvPreview = Extract<PreviewCsvFileResult, { readonly ok: true }>
 
+type DetectedMappingProfile = ManualCsvPreview['detectedMappingProfiles'][number]
+
 type ManualMappingPreviewState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading' }
   | { readonly status: 'ready'; readonly preview: ManualCsvPreview }
+  | { readonly status: 'error'; readonly message: string }
+
+type SaveMappingProfileState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'saving' }
+  | { readonly status: 'success'; readonly name: string }
   | { readonly status: 'error'; readonly message: string }
 
 const formatFileSize = (sizeBytes: number): string => {
@@ -117,6 +125,35 @@ const createEmptyManualMapping = (): ManualCsvColumnMapping => ({
   fixedCurrency: '',
 })
 
+const normalizeColumnName = (columnName: string): string => columnName.trim().toLowerCase()
+
+const getPreviewHeaderForSavedColumn = (
+  preview: ManualCsvPreview,
+  columnName: string | undefined,
+): string | undefined => {
+  if (!columnName) {
+    return undefined
+  }
+
+  return (
+    preview.headers.find(
+      (header) => normalizeColumnName(header) === normalizeColumnName(columnName),
+    ) ?? columnName
+  )
+}
+
+const getManualMappingFromDetectedProfile = (
+  profile: DetectedMappingProfile,
+  preview: ManualCsvPreview,
+): ManualCsvColumnMapping => ({
+  amountColumn: getPreviewHeaderForSavedColumn(preview, profile.mapping.amountColumn) ?? '',
+  currencyColumn: getPreviewHeaderForSavedColumn(preview, profile.mapping.currencyColumn) ?? '',
+  dateColumn: getPreviewHeaderForSavedColumn(preview, profile.mapping.dateColumn) ?? '',
+  dateFormat: profile.mapping.dateFormat ?? 'yyyy-mm-dd',
+  descriptionColumn: getPreviewHeaderForSavedColumn(preview, profile.mapping.descriptionColumn) ?? '',
+  fixedCurrency: profile.mapping.fixedCurrency ?? '',
+})
+
 const manualDateFormatOptions: readonly { readonly label: string; readonly value: ManualCsvDateFormat }[] = [
   { label: 'YYYY-MM-DD', value: 'yyyy-mm-dd' },
   { label: 'DD.MM.YYYY', value: 'dd.mm.yyyy' },
@@ -134,6 +171,22 @@ const getManualMappingError = (mapping: ManualCsvColumnMapping): string | null =
 
   if (mapping.fixedCurrency && !/^[A-Za-z]{3}$/.test(mapping.fixedCurrency.trim())) {
     return 'Fixed currency must be a three-letter ISO code.'
+  }
+
+  return null
+}
+
+const mappingProfileNameMaxLength = 80
+
+const getMappingProfileNameError = (name: string): string | null => {
+  const trimmedName = name.trim()
+
+  if (!trimmedName) {
+    return 'Enter a saved mapping name.'
+  }
+
+  if (trimmedName.length > mappingProfileNameMaxLength) {
+    return `Mapping name must be ${mappingProfileNameMaxLength} characters or fewer.`
   }
 
   return null
@@ -179,6 +232,9 @@ export function ImportPage() {
   const [manualMapping, setManualMapping] = useState<ManualCsvColumnMapping>(
     createEmptyManualMapping,
   )
+  const [mappingProfileName, setMappingProfileName] = useState('')
+  const [saveMappingProfileState, setSaveMappingProfileState] =
+    useState<SaveMappingProfileState>({ status: 'idle' })
   const isSelecting = csvSelectionState.status === 'selecting'
   const selectedFiles = csvSelectionState.files
   const importBatches =
@@ -187,20 +243,32 @@ export function ImportPage() {
   const isImporting = csvImportState.status === 'importing'
   const isClearingImportHistory = clearImportHistoryState.status === 'clearing'
   const isManualPreviewLoading = manualMappingPreviewState.status === 'loading'
+  const isSavingMappingProfile = saveMappingProfileState.status === 'saving'
   const canImportSelectedFiles = selectedFiles.length > 0 && !isSelecting && !isImporting
   const canClearImportHistory =
     importBatches.length > 0 && !isImportHistoryLoading && !isClearingImportHistory
   const canPreviewManualMapping = selectedFiles.length === 1 && !isSelecting && !isImporting
   const manualMappingError = getManualMappingError(manualMapping)
+  const mappingProfileNameError = getMappingProfileNameError(mappingProfileName)
   const canImportManualMapping =
     selectedFiles.length === 1 &&
     manualMappingPreviewState.status === 'ready' &&
     !manualMappingError &&
     !isImporting
+  const canSaveMappingProfile =
+    manualMappingPreviewState.status === 'ready' &&
+    !manualMappingError &&
+    !mappingProfileNameError &&
+    !isSavingMappingProfile
 
   const loadImportBatches = async () => {
     setImportBatchesLoadState({ status: 'loading' })
     setImportBatchesLoadState(await loadImportBatchesState())
+  }
+
+  const updateManualMapping = (nextMapping: ManualCsvColumnMapping): void => {
+    setManualMapping(nextMapping)
+    setSaveMappingProfileState({ status: 'idle' })
   }
 
   useEffect(() => {
@@ -253,6 +321,8 @@ export function ImportPage() {
       setCsvImportState({ status: 'idle' })
       setManualMappingPreviewState({ status: 'idle' })
       setManualMapping(createEmptyManualMapping())
+      setMappingProfileName('')
+      setSaveMappingProfileState({ status: 'idle' })
       setCsvSelectionState({ status: 'idle', files: result.files })
     } catch {
       setCsvSelectionState({
@@ -322,6 +392,7 @@ export function ImportPage() {
     }
 
     setManualMappingPreviewState({ status: 'loading' })
+    setSaveMappingProfileState({ status: 'idle' })
 
     try {
       const result = await window.fintory.import.previewCsvFile({
@@ -331,6 +402,12 @@ export function ImportPage() {
       if (!result.ok) {
         setManualMappingPreviewState({ status: 'error', message: result.message })
         return
+      }
+
+      const [detectedMappingProfile] = result.detectedMappingProfiles
+
+      if (detectedMappingProfile) {
+        updateManualMapping(getManualMappingFromDetectedProfile(detectedMappingProfile, result))
       }
 
       setManualMappingPreviewState({ status: 'ready', preview: result })
@@ -388,6 +465,66 @@ export function ImportPage() {
       setCsvImportState({
         status: 'error',
         message: 'CSV file could not be imported with the selected mapping right now.',
+      })
+    }
+  }
+
+  const handleSaveMappingProfile = async () => {
+    if (!window.fintory) {
+      setSaveMappingProfileState({
+        status: 'error',
+        message: 'The Electron preload bridge is not available in this runtime.',
+      })
+      return
+    }
+
+    if (!manualPreview) {
+      setSaveMappingProfileState({
+        status: 'error',
+        message: 'Preview CSV columns before saving a mapping.',
+      })
+      return
+    }
+
+    const nameValidationMessage = getMappingProfileNameError(mappingProfileName)
+    const mappingValidationMessage = getManualMappingError(manualMapping)
+
+    if (nameValidationMessage || mappingValidationMessage) {
+      setSaveMappingProfileState({
+        status: 'error',
+        message: nameValidationMessage ?? mappingValidationMessage ?? 'Complete the mapping before saving it.',
+      })
+      return
+    }
+
+    const trimmedName = mappingProfileName.trim()
+
+    setSaveMappingProfileState({ status: 'saving' })
+
+    try {
+      const result = await window.fintory.import.saveCsvMappingProfile({
+        headers: manualPreview.headers,
+        mapping: {
+          amountColumn: manualMapping.amountColumn,
+          currencyColumn: manualMapping.currencyColumn || undefined,
+          dateColumn: manualMapping.dateColumn,
+          dateFormat: manualMapping.dateFormat ?? 'yyyy-mm-dd',
+          descriptionColumn: manualMapping.descriptionColumn,
+          fixedCurrency: manualMapping.fixedCurrency?.trim().toUpperCase() || undefined,
+        },
+        name: trimmedName,
+      })
+
+      if (!result.ok) {
+        setSaveMappingProfileState({ status: 'error', message: result.message })
+        return
+      }
+
+      setSaveMappingProfileState({ status: 'success', name: result.profile.name })
+    } catch {
+      setSaveMappingProfileState({
+        status: 'error',
+        message: 'CSV mapping could not be saved right now.',
       })
     }
   }
@@ -503,6 +640,7 @@ export function ImportPage() {
       label: `${column.header} (${column.nonEmptyCount}/${manualPreview.rowCount} non-empty)`,
       value: column.header,
     })) ?? []
+  const detectedMappingProfile = manualPreview?.detectedMappingProfiles[0] ?? null
 
   return (
     <>
@@ -640,6 +778,12 @@ export function ImportPage() {
                     Rows found: {manualPreview.rowCount}.
                   </Alert>
 
+                  {detectedMappingProfile ? (
+                    <Alert color="green" title="Saved mapping applied">
+                      Using saved mapping: {detectedMappingProfile.name}. Review the columns below before importing.
+                    </Alert>
+                  ) : null}
+
                   <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
                     <Select
                       data={manualColumnOptions}
@@ -647,7 +791,7 @@ export function ImportPage() {
                       placeholder="Choose column"
                       value={manualMapping.dateColumn || null}
                       onChange={(value) =>
-                        setManualMapping({ ...manualMapping, dateColumn: value ?? '' })
+                        updateManualMapping({ ...manualMapping, dateColumn: value ?? '' })
                       }
                     />
                     <Select
@@ -655,7 +799,7 @@ export function ImportPage() {
                       label="Date format"
                       value={manualMapping.dateFormat ?? 'yyyy-mm-dd'}
                       onChange={(value) =>
-                        setManualMapping({
+                        updateManualMapping({
                           ...manualMapping,
                           dateFormat: (value ?? 'yyyy-mm-dd') as ManualCsvDateFormat,
                         })
@@ -667,7 +811,7 @@ export function ImportPage() {
                       placeholder="Choose column"
                       value={manualMapping.descriptionColumn || null}
                       onChange={(value) =>
-                        setManualMapping({ ...manualMapping, descriptionColumn: value ?? '' })
+                        updateManualMapping({ ...manualMapping, descriptionColumn: value ?? '' })
                       }
                     />
                     <Select
@@ -676,7 +820,7 @@ export function ImportPage() {
                       placeholder="Choose column"
                       value={manualMapping.amountColumn || null}
                       onChange={(value) =>
-                        setManualMapping({ ...manualMapping, amountColumn: value ?? '' })
+                        updateManualMapping({ ...manualMapping, amountColumn: value ?? '' })
                       }
                     />
                     <Select
@@ -686,7 +830,7 @@ export function ImportPage() {
                       placeholder="Choose column or use fixed currency"
                       value={manualMapping.currencyColumn || null}
                       onChange={(value) =>
-                        setManualMapping({ ...manualMapping, currencyColumn: value ?? '' })
+                        updateManualMapping({ ...manualMapping, currencyColumn: value ?? '' })
                       }
                     />
                   </SimpleGrid>
@@ -696,9 +840,52 @@ export function ImportPage() {
                     placeholder="USD"
                     value={manualMapping.fixedCurrency ?? ''}
                     onChange={(event) =>
-                      setManualMapping({ ...manualMapping, fixedCurrency: event.currentTarget.value })
+                      updateManualMapping({ ...manualMapping, fixedCurrency: event.currentTarget.value })
                     }
                   />
+
+                  <Card bg="gray-light" padding="md" radius="md" withBorder>
+                    <Stack gap="sm">
+                      <Text fw={700}>Save this mapping</Text>
+                      <Text c="dimmed" size="sm">
+                        Save the selected columns locally for future CSV files with the same headers.
+                      </Text>
+                      <Group align="flex-start">
+                        <TextInput
+                          error={mappingProfileName ? mappingProfileNameError : undefined}
+                          label="Mapping name"
+                          maw={360}
+                          placeholder="My bank CSV"
+                          value={mappingProfileName}
+                          onChange={(event) => {
+                            setMappingProfileName(event.currentTarget.value)
+                            setSaveMappingProfileState({ status: 'idle' })
+                          }}
+                        />
+                        <Button
+                          disabled={!canSaveMappingProfile}
+                          loading={isSavingMappingProfile}
+                          mt="xl"
+                          variant="light"
+                          onClick={() => void handleSaveMappingProfile()}
+                        >
+                          Save mapping
+                        </Button>
+                      </Group>
+                    </Stack>
+                  </Card>
+
+                  {saveMappingProfileState.status === 'success' ? (
+                    <Alert color="green" title="Mapping saved">
+                      Saved mapping: {saveMappingProfileState.name}.
+                    </Alert>
+                  ) : null}
+
+                  {saveMappingProfileState.status === 'error' ? (
+                    <Alert color="yellow" title="Mapping could not be saved">
+                      {saveMappingProfileState.message}
+                    </Alert>
+                  ) : null}
 
                   {manualMappingError ? (
                     <Alert color="yellow" title="Mapping is incomplete">

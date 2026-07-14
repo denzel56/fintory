@@ -6,6 +6,9 @@ import type { OpenDialogOptions } from 'electron'
 import { importIpcChannels } from '../../shared/ipc/import.js'
 import type {
   ClearImportHistoryResult,
+  CsvMappingProfileDto,
+  FindCsvMappingProfilesInput,
+  FindCsvMappingProfilesResult,
   ImportCsvFileWithMappingInput,
   ImportCsvFilesInput,
   ImportCsvFilesResult,
@@ -13,10 +16,14 @@ import type {
   ListImportBatchesResult,
   PreviewCsvFileInput,
   PreviewCsvFileResult,
+  SaveCsvMappingProfileInput,
+  SaveCsvMappingProfileResult,
   SelectCsvFilesResult,
   SelectedCsvFileMetadata,
 } from '../../shared/types/import.js'
 import { getActiveProjectDatabase } from '../db/project-database-connection.js'
+import { createCsvMappingProfilesRepository } from '../db/repositories/csv-mapping-profiles-repository.js'
+import type { CsvMappingProfileRecord } from '../db/repositories/csv-mapping-profiles-repository.js'
 import { createImportBatchesRepository } from '../db/repositories/import-batches-repository.js'
 import { runInTransaction } from '../db/transactions.js'
 import {
@@ -81,6 +88,16 @@ const toImportBatchDto = (batch: {
   sourceFileName: batch.sourceFileName,
 })
 
+const toCsvMappingProfileDto = (profile: CsvMappingProfileRecord): CsvMappingProfileDto => ({
+  createdAt: profile.createdAt,
+  headerFingerprint: profile.headerFingerprint,
+  headers: profile.headers,
+  id: profile.id,
+  mapping: profile.mapping,
+  name: profile.name,
+  updatedAt: profile.updatedAt,
+})
+
 export const getSelectedCsvFilePath = (selectionId: string): string | undefined =>
   selectedCsvFilePathsById.get(selectionId)
 
@@ -109,8 +126,58 @@ const isPreviewCsvFileInput = (input: unknown): input is PreviewCsvFileInput => 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0
 
+const mappingProfileNameMaxLength = 80
+const mappingProfileHeaderMaxCount = 120
+
+const isHeaderArray = (value: unknown): value is readonly string[] => {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= mappingProfileHeaderMaxCount &&
+    value.every((header) => typeof header === 'string' && header.trim().length > 0)
+  )
+}
+
+const normalizeColumnName = (columnName: string): string => columnName.trim().toLowerCase()
+
 const isManualCsvDateFormat = (value: unknown): boolean =>
   value === undefined || value === 'dd.mm.yyyy' || value === 'mm/dd/yyyy' || value === 'yyyy-mm-dd'
+
+const isOptionalString = (value: unknown): value is string | undefined => {
+  return value === undefined || typeof value === 'string'
+}
+
+const isValidFixedCurrency = (value: unknown): value is string | undefined => {
+  return value === undefined || (typeof value === 'string' && (value.trim().length === 0 || /^[A-Za-z]{3}$/.test(value.trim())))
+}
+
+const isManualCsvColumnMapping = (
+  value: unknown,
+): value is ImportCsvFileWithMappingInput['mapping'] => {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const mapping = value as
+    | Partial<Record<keyof ImportCsvFileWithMappingInput['mapping'], unknown>>
+    | null
+
+  if (typeof mapping !== 'object' || mapping === null) {
+    return false
+  }
+
+  const hasCurrencyFallback = isNonEmptyString(mapping.currencyColumn) || isNonEmptyString(mapping.fixedCurrency)
+
+  return (
+    isNonEmptyString(mapping.amountColumn) &&
+    isNonEmptyString(mapping.dateColumn) &&
+    isManualCsvDateFormat(mapping.dateFormat) &&
+    isNonEmptyString(mapping.descriptionColumn) &&
+    isOptionalString(mapping.currencyColumn) &&
+    isValidFixedCurrency(mapping.fixedCurrency) &&
+    hasCurrencyFallback
+  )
+}
 
 const isImportCsvFileWithMappingInput = (
   input: unknown,
@@ -123,24 +190,55 @@ const isImportCsvFileWithMappingInput = (
     readonly mapping: unknown
     readonly selectionId: unknown
   }
-  const mapping = candidate.mapping as
-    | Partial<Record<keyof ImportCsvFileWithMappingInput['mapping'], unknown>>
-    | null
-
-  if (typeof mapping !== 'object' || mapping === null) {
-    return false
-  }
-
-  const hasCurrencyFallback = isNonEmptyString(mapping.currencyColumn) || isNonEmptyString(mapping.fixedCurrency)
 
   return (
     isNonEmptyString(candidate.selectionId) &&
-    isNonEmptyString(mapping.amountColumn) &&
-    isNonEmptyString(mapping.dateColumn) &&
-    isManualCsvDateFormat(mapping.dateFormat) &&
-    isNonEmptyString(mapping.descriptionColumn) &&
-    hasCurrencyFallback
+    isManualCsvColumnMapping(candidate.mapping)
   )
+}
+
+const isSaveCsvMappingProfileInput = (
+  input: unknown,
+): input is SaveCsvMappingProfileInput => {
+  if (typeof input !== 'object' || input === null) {
+    return false
+  }
+
+  const candidate = input as {
+    readonly headers?: unknown
+    readonly mapping?: unknown
+    readonly name?: unknown
+  }
+
+  if (!isHeaderArray(candidate.headers) || !isManualCsvColumnMapping(candidate.mapping)) {
+    return false
+  }
+
+  const normalizedHeaders = new Set(candidate.headers.map(normalizeColumnName))
+  const mappedColumns = [
+    candidate.mapping.amountColumn,
+    candidate.mapping.dateColumn,
+    candidate.mapping.descriptionColumn,
+    candidate.mapping.currencyColumn,
+  ].filter((columnName): columnName is string => typeof columnName === 'string' && columnName.trim().length > 0)
+
+  return (
+    isNonEmptyString(candidate.name) &&
+    candidate.name.trim().length <= mappingProfileNameMaxLength &&
+    mappedColumns.every((columnName) => normalizedHeaders.has(normalizeColumnName(columnName)))
+  )
+}
+
+const isFindCsvMappingProfilesInput = (
+  input: unknown,
+): input is FindCsvMappingProfilesInput => {
+  if (typeof input !== 'object' || input === null) {
+    return false
+  }
+
+  const candidate = input as { readonly headers?: unknown }
+
+  return isHeaderArray(candidate.headers)
 }
 
 const isString = (value: string | undefined): value is string => typeof value === 'string'
@@ -170,6 +268,44 @@ export function registerImportIpcHandlers(): void {
       }
     }
   })
+
+  ipcMain.handle(
+    importIpcChannels.findCsvMappingProfiles,
+    async (_event, input: unknown): Promise<FindCsvMappingProfilesResult> => {
+      const database = getActiveProjectDatabase()
+
+      if (!database) {
+        return {
+          ok: false,
+          code: 'project-not-open',
+          message: 'Open or create a project before finding saved CSV mappings.',
+        }
+      }
+
+      if (!isFindCsvMappingProfilesInput(input)) {
+        return {
+          ok: false,
+          code: 'invalid-csv-mapping-profile-input',
+          message: 'CSV mapping lookup requires one or more headers.',
+        }
+      }
+
+      try {
+        const repository = createCsvMappingProfilesRepository(database)
+
+        return {
+          ok: true,
+          profiles: repository.findByHeaders(input.headers).map(toCsvMappingProfileDto),
+        }
+      } catch {
+        return {
+          ok: false,
+          code: 'csv-mapping-profile-find-failed',
+          message: 'Saved CSV mappings could not be found right now.',
+        }
+      }
+    },
+  )
 
   ipcMain.handle(
     importIpcChannels.importCsvFiles,
@@ -264,7 +400,7 @@ export function registerImportIpcHandlers(): void {
         }
       }
 
-      return previewCsvFile({ filePath })
+      return previewCsvFile({ database: getActiveProjectDatabase() ?? undefined, filePath })
     },
   )
 
@@ -294,6 +430,57 @@ export function registerImportIpcHandlers(): void {
       }
     }
   })
+
+  ipcMain.handle(
+    importIpcChannels.saveCsvMappingProfile,
+    async (_event, input: unknown): Promise<SaveCsvMappingProfileResult> => {
+      const database = getActiveProjectDatabase()
+
+      if (!database) {
+        return {
+          ok: false,
+          code: 'project-not-open',
+          message: 'Open or create a project before saving CSV mappings.',
+        }
+      }
+
+      if (!isSaveCsvMappingProfileInput(input)) {
+        return {
+          ok: false,
+          code: 'invalid-csv-mapping-profile-input',
+          message: 'CSV mapping profile requires a name, headers, and a valid mapping.',
+        }
+      }
+
+      try {
+        const repository = createCsvMappingProfilesRepository(database)
+        const timestamp = new Date().toISOString()
+        const profile = repository.create({
+          createdAt: timestamp,
+          headers: input.headers.map((header) => header.trim()),
+          id: randomUUID(),
+          mapping: {
+            amountColumn: input.mapping.amountColumn.trim(),
+            currencyColumn: input.mapping.currencyColumn?.trim() || undefined,
+            dateColumn: input.mapping.dateColumn.trim(),
+            dateFormat: input.mapping.dateFormat,
+            descriptionColumn: input.mapping.descriptionColumn.trim(),
+            fixedCurrency: input.mapping.fixedCurrency?.trim().toUpperCase() || undefined,
+          },
+          name: input.name.trim(),
+          updatedAt: timestamp,
+        })
+
+        return { ok: true, profile: toCsvMappingProfileDto(profile) }
+      } catch {
+        return {
+          ok: false,
+          code: 'csv-mapping-profile-save-failed',
+          message: 'CSV mapping profile could not be saved right now.',
+        }
+      }
+    },
+  )
 
   ipcMain.handle(importIpcChannels.selectCsvFiles, async (event): Promise<SelectCsvFilesResult> => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender)

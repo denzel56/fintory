@@ -5,6 +5,7 @@ import {
   runProjectDatabaseMigrations,
 } from './migrations/project-database-migrations.js'
 import { createCategoriesRepository } from './repositories/categories-repository.js'
+import { createCsvMappingProfilesRepository } from './repositories/csv-mapping-profiles-repository.js'
 import { createImportBatchesRepository } from './repositories/import-batches-repository.js'
 import { createProjectMetaRepository } from './repositories/project-meta-repository.js'
 import { createTransactionsRepository } from './repositories/transactions-repository.js'
@@ -16,6 +17,7 @@ export type SqliteSmokeResult = {
   readonly coreSchemaIndexCount: number
   readonly coreSchemaRowCount: number
   readonly coreSchemaTableCount: number
+  readonly csvMappingProfilesSmokePassed: boolean
   readonly insertedName: string
   readonly importHistoryClearPassed: boolean
   readonly migrationVersion: number
@@ -28,6 +30,7 @@ export type SqliteSmokeResult = {
 
 const expectedCoreSchemaTables = [
   'categories',
+  'csv_mapping_profiles',
   'import_batches',
   'project_meta',
   'transactions',
@@ -35,6 +38,7 @@ const expectedCoreSchemaTables = [
 
 const expectedCoreSchemaIndexes = [
   'idx_import_batches_source_file_hash',
+  'idx_csv_mapping_profiles_header_fingerprint',
   'idx_transactions_category_id',
   'idx_transactions_direction',
   'idx_transactions_import_batch_id',
@@ -45,6 +49,15 @@ const expectedCoreSchemaIndexes = [
 
 const expectedCoreSchemaColumns: Record<(typeof expectedCoreSchemaTables)[number], readonly string[]> = {
   categories: ['id', 'name', 'color', 'created_at', 'updated_at'],
+  csv_mapping_profiles: [
+    'id',
+    'name',
+    'header_fingerprint',
+    'headers_json',
+    'mapping_json',
+    'created_at',
+    'updated_at',
+  ],
   import_batches: [
     'id',
     'source_file_name',
@@ -125,6 +138,7 @@ const getCoreSchemaRowCount = (database: DatabaseSync): number => {
 
 const runRepositorySmokeCheck = (database: DatabaseSync): boolean => {
   const categoriesRepository = createCategoriesRepository(database)
+  const csvMappingProfilesRepository = createCsvMappingProfilesRepository(database)
   const importBatchesRepository = createImportBatchesRepository(database)
   const projectMetaRepository = createProjectMetaRepository(database)
   const transactionsRepository = createTransactionsRepository(database)
@@ -133,12 +147,47 @@ const runRepositorySmokeCheck = (database: DatabaseSync): boolean => {
     categoriesRepository.count() === 0 &&
     categoriesRepository.list().length === 0 &&
     categoriesRepository.findById('missing-category') === null &&
+    csvMappingProfilesRepository.count() === 0 &&
+    csvMappingProfilesRepository.findById('missing-csv-mapping-profile') === null &&
+    csvMappingProfilesRepository.findByHeaders(['posted', 'memo']).length === 0 &&
     importBatchesRepository.count() === 0 &&
     importBatchesRepository.findById('missing-import-batch') === null &&
     projectMetaRepository.count() === 0 &&
     projectMetaRepository.findById('missing-project-meta') === null &&
     transactionsRepository.count() === 0 &&
     transactionsRepository.findById('missing-transaction') === null
+  )
+}
+
+const runCsvMappingProfilesSmokeCheck = (database: DatabaseSync): boolean => {
+  const repository = createCsvMappingProfilesRepository(database)
+  const timestamp = '2026-01-01T00:00:00.000Z'
+  const headers = ['Posted', 'Memo', 'Total', 'Currency']
+  const createdProfile = repository.create({
+    createdAt: timestamp,
+    headers,
+    id: 'csv-mapping-profile-smoke',
+    mapping: {
+      amountColumn: 'Total',
+      currencyColumn: 'Currency',
+      dateColumn: 'Posted',
+      dateFormat: 'dd.mm.yyyy',
+      descriptionColumn: 'Memo',
+      fixedCurrency: 'USD',
+    },
+    name: 'Smoke mapping profile',
+    updatedAt: timestamp,
+  })
+  const foundById = repository.findById(createdProfile.id)
+  const foundByHeaders = repository.findByHeaders([' posted ', 'MEMO', 'total', 'currency'])
+
+  return (
+    repository.count() === 1 &&
+    repository.list().length === 1 &&
+    foundById?.name === 'Smoke mapping profile' &&
+    foundByHeaders.length === 1 &&
+    foundByHeaders[0]?.id === createdProfile.id &&
+    createdProfile.mapping.fixedCurrency === 'USD'
   )
 }
 
@@ -378,6 +427,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
     const categoryCrudSmokePassed = runCategoryCrudSmokeCheck(database)
     const transactionSourceHashUniquePassed = runTransactionSourceHashUniqueSmokeCheck(database)
     const importHistoryClearPassed = runImportHistoryClearSmokeCheck(database)
+    const csvMappingProfilesSmokePassed = runCsvMappingProfilesSmokeCheck(database)
     const seededCategoryCount = runDefaultCategorySeedSmokeCheck(database)
 
     if (!insertedRow || !versionRow) {
@@ -399,6 +449,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
       !categoryCrudSmokePassed ||
       !transactionSourceHashUniquePassed ||
       !importHistoryClearPassed ||
+      !csvMappingProfilesSmokePassed ||
       seededCategoryCount !== defaultCategoryCount
     ) {
       throw new Error('SQLite repository smoke check did not return expected results.')
@@ -410,6 +461,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
       coreSchemaIndexCount: expectedCoreSchemaIndexes.length,
       coreSchemaRowCount,
       coreSchemaTableCount: expectedCoreSchemaTables.length,
+      csvMappingProfilesSmokePassed,
       insertedName: insertedRow.name,
       importHistoryClearPassed,
       migrationVersion: migrationState.currentVersion,
