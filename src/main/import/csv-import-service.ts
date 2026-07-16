@@ -21,6 +21,7 @@ import { createTransactionSourceHashes } from './source-hash.js'
 import type { TransactionSourceHash } from './source-hash.js'
 import type { TransactionDraft } from './transaction-draft.js'
 import { genericCsvImportAdapter } from './adapters/generic-csv-import-adapter.js'
+import { userStatementCsvImportAdapter } from './adapters/user-statement-csv-import-adapter.js'
 import type { CsvImportAdapter, CsvImportAdapterError } from './adapters/csv-import-adapter.js'
 import {
   manualCsvMappingAdapterId,
@@ -41,7 +42,10 @@ export type ImportCsvFilesInput = {
   readonly files: readonly CsvImportFileInput[]
 }
 
-const csvImportAdapters: readonly CsvImportAdapter[] = [genericCsvImportAdapter]
+const csvImportAdapters: readonly CsvImportAdapter[] = [
+  userStatementCsvImportAdapter,
+  genericCsvImportAdapter,
+]
 const unsupportedAdapterId = 'unsupported-csv-v1'
 
 const getFileHash = (content: Buffer): string =>

@@ -11,6 +11,8 @@ export type CsvImportAdapterErrorCode =
   | 'missing-required-column'
   | 'missing-required-value'
   | 'unsupported-column-set'
+  | 'unsupported-transaction-status'
+  | 'unsupported-transaction-type'
 
 export type CsvImportAdapterError = {
   readonly code: CsvImportAdapterErrorCode

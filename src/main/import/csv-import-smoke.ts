@@ -25,6 +25,15 @@ export type CsvImportSmokeResult = {
   readonly secondImportDuplicateCount: number
   readonly secondImportFailedCount: number
   readonly secondImportInsertedCount: number
+  readonly statementFirstImportDuplicateCount: number
+  readonly statementFirstImportFailedCount: number
+  readonly statementFirstImportInsertedCount: number
+  readonly statementInvalidImportFailedCount: number
+  readonly statementInvalidImportHasUnsupportedStatusDiagnostic: boolean
+  readonly statementInvalidImportHasUnsupportedTypeDiagnostic: boolean
+  readonly statementSecondImportDuplicateCount: number
+  readonly statementSecondImportFailedCount: number
+  readonly statementSecondImportInsertedCount: number
   readonly transactionCount: number
 }
 
@@ -32,6 +41,8 @@ export const runCsvImportSmokeCheck = async (): Promise<CsvImportSmokeResult> =>
   const tempDirectory = await mkdtemp(join(tmpdir(), 'fintory-csv-import-smoke-'))
   const csvFilePath = join(tempDirectory, 'sample.csv')
   const manualCsvFilePath = join(tempDirectory, 'manual-sample.csv')
+  const statementCsvFilePath = join(tempDirectory, 'statement-sample.csv')
+  const invalidStatementCsvFilePath = join(tempDirectory, 'invalid-statement-sample.csv')
   const database = new DatabaseSync(':memory:')
 
   try {
@@ -54,12 +65,42 @@ export const runCsvImportSmokeCheck = async (): Promise<CsvImportSmokeResult> =>
       ].join('\n'),
       { encoding: 'utf8' },
     )
+    await writeFile(
+      statementCsvFilePath,
+      [
+        'operationDate,transactionDate,accountName,accountNumber,cardName,cardNumber,merchant,amount,currency,status,category,mcc,type,comment,bonusValue,bonusTitle',
+        '03.07.2026,04.07.2026,"Sample account",SANITIZED_ACCOUNT_NUMBER,"Sample card",SANITIZED_CARD_NUMBER,"SAMPLE MERCHANT",497,RUR,Выполнен,Маркетплейсы,5300,Списание,,,',
+        '03.07.2026,03.07.2026,"Sample account",SANITIZED_ACCOUNT_NUMBER,,,"SAMPLE PERSON",200,RUR,,Переводы,,Пополнение,,,',
+      ].join('\n'),
+      { encoding: 'utf8' },
+    )
+    await writeFile(
+      invalidStatementCsvFilePath,
+      [
+        'operationDate,transactionDate,accountName,accountNumber,cardName,cardNumber,merchant,amount,currency,status,category,mcc,type,comment,bonusValue,bonusTitle',
+        '05.07.2026,05.07.2026,"Sample account",SANITIZED_ACCOUNT_NUMBER,"Sample card",SANITIZED_CARD_NUMBER,"SAMPLE PENDING MERCHANT",100,RUR,В обработке,Маркетплейсы,5300,Списание,,,',
+        '06.07.2026,06.07.2026,"Sample account",SANITIZED_ACCOUNT_NUMBER,,,"SAMPLE UNKNOWN TYPE",150,RUR,,Переводы,,Возврат,,,',
+      ].join('\n'),
+      { encoding: 'utf8' },
+    )
 
     database.exec('PRAGMA foreign_keys = ON')
     runProjectDatabaseMigrations(database)
 
     const firstImport = await importCsvFiles({ database, files: [{ filePath: csvFilePath }] })
     const secondImport = await importCsvFiles({ database, files: [{ filePath: csvFilePath }] })
+    const statementFirstImport = await importCsvFiles({
+      database,
+      files: [{ filePath: statementCsvFilePath }],
+    })
+    const statementSecondImport = await importCsvFiles({
+      database,
+      files: [{ filePath: statementCsvFilePath }],
+    })
+    const statementInvalidImport = await importCsvFiles({
+      database,
+      files: [{ filePath: invalidStatementCsvFilePath }],
+    })
     const genericManualImport = await importCsvFileWithMapping({
       database,
       filePath: csvFilePath,
@@ -103,6 +144,9 @@ export const runCsvImportSmokeCheck = async (): Promise<CsvImportSmokeResult> =>
     if (
       !firstImport.ok ||
       !secondImport.ok ||
+      !statementFirstImport.ok ||
+      !statementSecondImport.ok ||
+      !statementInvalidImport.ok ||
       !genericManualImport.ok ||
       !manualPreview.ok ||
       !manualImport.ok
@@ -128,6 +172,21 @@ export const runCsvImportSmokeCheck = async (): Promise<CsvImportSmokeResult> =>
       secondImportDuplicateCount: secondImport.duplicateCount,
       secondImportFailedCount: secondImport.failedCount,
       secondImportInsertedCount: secondImport.insertedCount,
+      statementFirstImportDuplicateCount: statementFirstImport.duplicateCount,
+      statementFirstImportFailedCount: statementFirstImport.failedCount,
+      statementFirstImportInsertedCount: statementFirstImport.insertedCount,
+      statementInvalidImportFailedCount: statementInvalidImport.failedCount,
+      statementInvalidImportHasUnsupportedStatusDiagnostic:
+        statementInvalidImport.files[0]?.diagnostics.some(
+          (diagnostic) => diagnostic.code === 'unsupported-transaction-status',
+        ) ?? false,
+      statementInvalidImportHasUnsupportedTypeDiagnostic:
+        statementInvalidImport.files[0]?.diagnostics.some(
+          (diagnostic) => diagnostic.code === 'unsupported-transaction-type',
+        ) ?? false,
+      statementSecondImportDuplicateCount: statementSecondImport.duplicateCount,
+      statementSecondImportFailedCount: statementSecondImport.failedCount,
+      statementSecondImportInsertedCount: statementSecondImport.insertedCount,
       transactionCount: createTransactionsRepository(database).count(),
     }
   } finally {
