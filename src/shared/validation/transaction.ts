@@ -3,6 +3,7 @@ import type {
   TransactionDirection,
   TransactionSortDirection,
   TransactionSortField,
+  UpdateTransactionCategoryInput,
   ValidatedListTransactionsQuery,
 } from '../types/transaction.js'
 
@@ -10,11 +11,28 @@ type ValidationResult<Value> =
   | { readonly ok: true; readonly value: Value }
   | { readonly ok: false; readonly code: 'invalid-transactions-query'; readonly message: string }
 
+type UpdateCategoryValidationResult =
+  | { readonly ok: true; readonly value: UpdateTransactionCategoryInput }
+  | {
+      readonly ok: false
+      readonly code: 'invalid-transaction-category-update'
+      readonly message: string
+    }
+
+type UpdateCategoryFieldValidationResult<Value> =
+  | { readonly ok: true; readonly value: Value }
+  | {
+      readonly ok: false
+      readonly code: 'invalid-transaction-category-update'
+      readonly message: string
+    }
+
 const defaultPage = 1
 const defaultPageSize = 50
 const maxPageSize = 100
 const searchMaxLength = 120
 const categoryIdMaxLength = 120
+const transactionIdMaxLength = 120
 const datePattern = /^\d{4}-\d{2}-\d{2}$/
 
 const sortFields = new Set<TransactionSortField>(['amount', 'date', 'description'])
@@ -121,6 +139,56 @@ const validateOptionalCategoryId = (value: unknown): ValidationResult<string | n
   }
 
   return { ok: true, value: trimmedCategoryId }
+}
+
+const validateUpdateCategoryId = (
+  value: unknown,
+): UpdateCategoryFieldValidationResult<string | null> => {
+  if (value === undefined || value === null || value === '') {
+    return { ok: true, value: null }
+  }
+
+  if (typeof value !== 'string') {
+    return {
+      ok: false,
+      code: 'invalid-transaction-category-update',
+      message: 'Transaction category is invalid.',
+    }
+  }
+
+  const trimmedCategoryId = value.trim()
+
+  if (trimmedCategoryId.length === 0 || trimmedCategoryId.length > categoryIdMaxLength) {
+    return {
+      ok: false,
+      code: 'invalid-transaction-category-update',
+      message: 'Transaction category is invalid.',
+    }
+  }
+
+  return { ok: true, value: trimmedCategoryId }
+}
+
+const validateTransactionId = (value: unknown): UpdateCategoryFieldValidationResult<string> => {
+  if (typeof value !== 'string') {
+    return {
+      ok: false,
+      code: 'invalid-transaction-category-update',
+      message: 'Transaction id is invalid.',
+    }
+  }
+
+  const trimmedTransactionId = value.trim()
+
+  if (trimmedTransactionId.length === 0 || trimmedTransactionId.length > transactionIdMaxLength) {
+    return {
+      ok: false,
+      code: 'invalid-transaction-category-update',
+      message: 'Transaction id is invalid.',
+    }
+  }
+
+  return { ok: true, value: trimmedTransactionId }
 }
 
 const validateOptionalDirection = (value: unknown): ValidationResult<TransactionDirection | null> => {
@@ -238,6 +306,38 @@ export function validateListTransactionsQuery(
       sortDirection: sortDirection as TransactionSortDirection,
       sortField: sortField as TransactionSortField,
       toDate: toDateResult.value,
+    },
+  }
+}
+
+export function validateUpdateTransactionCategoryInput(
+  input: unknown,
+): UpdateCategoryValidationResult {
+  if (!isRecord(input)) {
+    return {
+      ok: false,
+      code: 'invalid-transaction-category-update',
+      message: 'Transaction category update is invalid.',
+    }
+  }
+
+  const transactionIdResult = validateTransactionId(input.transactionId)
+
+  if (!transactionIdResult.ok) {
+    return transactionIdResult
+  }
+
+  const categoryIdResult = validateUpdateCategoryId(input.categoryId)
+
+  if (!categoryIdResult.ok) {
+    return categoryIdResult
+  }
+
+  return {
+    ok: true,
+    value: {
+      categoryId: categoryIdResult.value,
+      transactionId: transactionIdResult.value,
     },
   }
 }

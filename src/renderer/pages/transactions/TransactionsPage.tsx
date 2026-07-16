@@ -162,6 +162,8 @@ export function TransactionsPage() {
   const [transactionsQuery, setTransactionsQuery] =
     useState<TransactionsQueryState>(defaultTransactionsQuery)
   const [searchInput, setSearchInput] = useState('')
+  const [transactionMessage, setTransactionMessage] = useState<string | null>(null)
+  const [updatingTransactionId, setUpdatingTransactionId] = useState<string | null>(null)
   const [transactionsLoadState, setTransactionsLoadState] = useState<TransactionsLoadState>({
     status: 'loading',
   })
@@ -229,8 +231,43 @@ export function TransactionsPage() {
 
   const handleResetFilters = () => {
     setSearchInput('')
+    setTransactionMessage(null)
     setTransactionsLoadState({ status: 'loading' })
     setTransactionsQuery(defaultTransactionsQuery)
+  }
+
+  const refreshTransactions = async () => {
+    setTransactionsLoadState({ status: 'loading' })
+    setTransactionsLoadState(await loadTransactionsState(transactionsQuery))
+  }
+
+  const handleUpdateTransactionCategory = async (
+    transactionId: string,
+    categoryId: string | null,
+  ) => {
+    if (!window.fintory) {
+      setTransactionMessage('The Electron preload bridge is not available in this runtime.')
+      return
+    }
+
+    setUpdatingTransactionId(transactionId)
+    setTransactionMessage(null)
+
+    try {
+      const result = await window.fintory.transactions.updateCategory({ categoryId, transactionId })
+
+      if (result.ok) {
+        setTransactionMessage(categoryId ? 'Transaction category updated.' : 'Transaction category cleared.')
+        await refreshTransactions()
+        return
+      }
+
+      setTransactionMessage(result.message)
+    } catch {
+      setTransactionMessage('Transaction category could not be updated right now.')
+    } finally {
+      setUpdatingTransactionId(null)
+    }
   }
 
   const transactionRows = transactions.map((transaction) => (
@@ -247,15 +284,17 @@ export function TransactionsPage() {
         </Stack>
       </Table.Td>
       <Table.Td>
-        {transaction.category ? (
-          <Badge color={transaction.category.color} variant="light">
-            {transaction.category.name}
-          </Badge>
-        ) : (
-          <Text c="dimmed" size="sm">
-            Uncategorized
-          </Text>
-        )}
+        <Select
+          aria-label="Transaction category"
+          clearable
+          data={categoryFilterOptions}
+          disabled={transactionFiltersLoadState.status !== 'loaded' || updatingTransactionId !== null}
+          placeholder="Uncategorized"
+          size="xs"
+          value={transaction.category?.id ?? null}
+          onChange={(value) => handleUpdateTransactionCategory(transaction.id, value || null)}
+          rightSection={updatingTransactionId === transaction.id ? <Loader size="xs" /> : undefined}
+        />
       </Table.Td>
       <Table.Td>
         <Badge color={getDirectionColor(transaction.direction)} variant="light">
@@ -385,6 +424,12 @@ export function TransactionsPage() {
         {transactionsLoadState.status === 'error' ? (
           <Alert color="red" title="Transactions unavailable">
             {transactionsLoadState.message}
+          </Alert>
+        ) : null}
+
+        {transactionMessage ? (
+          <Alert color="blue" title="Transaction update">
+            {transactionMessage}
           </Alert>
         ) : null}
 

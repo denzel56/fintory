@@ -34,6 +34,7 @@ const projectIpcChannels = {
 const transactionsIpcChannels = {
   getFilters: 'transactions:getFilters',
   list: 'transactions:list',
+  updateCategory: 'transactions:updateCategory',
 } as const
 
 const fintoryApi: FintoryApi = {
@@ -68,6 +69,7 @@ const fintoryApi: FintoryApi = {
   transactions: {
     getFilters: () => ipcRenderer.invoke(transactionsIpcChannels.getFilters),
     list: (query) => ipcRenderer.invoke(transactionsIpcChannels.list, query),
+    updateCategory: (input) => ipcRenderer.invoke(transactionsIpcChannels.updateCategory, input),
   },
 }
 
