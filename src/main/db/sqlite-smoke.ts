@@ -4,6 +4,7 @@ import {
   readProjectDatabaseMigrationState,
   runProjectDatabaseMigrations,
 } from './migrations/project-database-migrations.js'
+import { createAnalyticsRepository } from './repositories/analytics-repository.js'
 import { createCategoriesRepository } from './repositories/categories-repository.js'
 import { createCsvMappingProfilesRepository } from './repositories/csv-mapping-profiles-repository.js'
 import { createImportBatchesRepository } from './repositories/import-batches-repository.js'
@@ -13,6 +14,7 @@ import { runInTransaction } from './transactions.js'
 
 export type SqliteSmokeResult = {
   readonly appliedMigrationCount: number
+  readonly analyticsSmokePassed: boolean
   readonly categoryCrudSmokePassed: boolean
   readonly coreSchemaIndexCount: number
   readonly coreSchemaRowCount: number
@@ -388,6 +390,114 @@ const runImportHistoryClearSmokeCheck = (database: DatabaseSync): boolean => {
   )
 }
 
+const runAnalyticsSmokeCheck = (database: DatabaseSync): boolean => {
+  const timestamp = '2026-02-01T00:00:00.000Z'
+  const categoriesRepository = createCategoriesRepository(database)
+  const analyticsRepository = createAnalyticsRepository(database)
+  const category = categoriesRepository.create({
+    color: '#fa5252',
+    createdAt: timestamp,
+    id: 'analytics-category',
+    name: 'Analytics category',
+    updatedAt: timestamp,
+  })
+  const insertTransaction = database.prepare(
+    `INSERT INTO transactions (
+      id,
+      transaction_date,
+      description,
+      amount_minor,
+      currency,
+      direction,
+      category_id,
+      source_hash,
+      created_at,
+      updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+
+  insertTransaction.run(
+    'analytics-expense-category',
+    '2026-02-03',
+    'Analytics expense category',
+    2500,
+    'RUB',
+    'expense',
+    category.id,
+    'analytics-expense-category-source-hash',
+    timestamp,
+    timestamp,
+  )
+  insertTransaction.run(
+    'analytics-expense-uncategorized',
+    '2026-02-04',
+    'Analytics expense uncategorized',
+    1000,
+    'RUB',
+    'expense',
+    null,
+    'analytics-expense-uncategorized-source-hash',
+    timestamp,
+    timestamp,
+  )
+  insertTransaction.run(
+    'analytics-income',
+    '2026-02-05',
+    'Analytics income',
+    10000,
+    'RUB',
+    'income',
+    null,
+    'analytics-income-source-hash',
+    timestamp,
+    timestamp,
+  )
+  insertTransaction.run(
+    'analytics-outside-range',
+    '2026-03-01',
+    'Analytics outside range',
+    9900,
+    'RUB',
+    'expense',
+    category.id,
+    'analytics-outside-range-source-hash',
+    timestamp,
+    timestamp,
+  )
+
+  const query = {
+    fromDate: '2026-02-01',
+    largestExpensesLimit: 2,
+    toDate: '2026-02-28',
+  }
+  const dashboard = analyticsRepository.getDashboard(query)
+  const rubSummary = dashboard.periodSummary.totalsByCurrency.find(
+    (summary) => summary.currency === 'RUB',
+  )
+  const categorizedExpense = dashboard.expensesByCategory.find(
+    (expense) => expense.category?.id === category.id,
+  )
+  const uncategorizedExpense = dashboard.expensesByCategory.find(
+    (expense) => expense.category === null,
+  )
+
+  return (
+    dashboard.periodSummary.transactionCount === 3 &&
+    rubSummary?.expenseTotalMinor === 3500 &&
+    rubSummary.incomeTotalMinor === 10000 &&
+    rubSummary.netTotalMinor === 6500 &&
+    dashboard.expensesByMonth.length === 1 &&
+    dashboard.expensesByMonth[0]?.month === '2026-02' &&
+    dashboard.expensesByMonth[0]?.amountMinor === 3500 &&
+    dashboard.incomeByMonth.length === 1 &&
+    dashboard.incomeByMonth[0]?.amountMinor === 10000 &&
+    categorizedExpense?.amountMinor === 2500 &&
+    uncategorizedExpense?.amountMinor === 1000 &&
+    dashboard.largestExpenses.length === 2 &&
+    dashboard.largestExpenses[0]?.id === 'analytics-expense-category'
+  )
+}
+
 export function runSqliteSmokeCheck(): SqliteSmokeResult {
   const database = new DatabaseSync(':memory:')
 
@@ -429,6 +539,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
     const importHistoryClearPassed = runImportHistoryClearSmokeCheck(database)
     const csvMappingProfilesSmokePassed = runCsvMappingProfilesSmokeCheck(database)
     const seededCategoryCount = runDefaultCategorySeedSmokeCheck(database)
+    const analyticsSmokePassed = runAnalyticsSmokeCheck(database)
 
     if (!insertedRow || !versionRow) {
       throw new Error('SQLite smoke check did not return expected rows.')
@@ -450,6 +561,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
       !transactionSourceHashUniquePassed ||
       !importHistoryClearPassed ||
       !csvMappingProfilesSmokePassed ||
+      !analyticsSmokePassed ||
       seededCategoryCount !== defaultCategoryCount
     ) {
       throw new Error('SQLite repository smoke check did not return expected results.')
@@ -457,6 +569,7 @@ export function runSqliteSmokeCheck(): SqliteSmokeResult {
 
     return {
       appliedMigrationCount: migrationState.appliedMigrationCount,
+      analyticsSmokePassed,
       categoryCrudSmokePassed,
       coreSchemaIndexCount: expectedCoreSchemaIndexes.length,
       coreSchemaRowCount,
