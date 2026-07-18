@@ -57,6 +57,10 @@ try {
     throw new Error('SQLite default category seed smoke check returned an unexpected result.')
   }
 
+  if (!result.analyticsSmokePassed) {
+    throw new Error('SQLite analytics smoke check returned an unexpected result.')
+  }
+
   console.log(
     `SQLite smoke check passed with SQLite ${result.sqliteVersion} and migration version ${result.migrationVersion}.`,
   )

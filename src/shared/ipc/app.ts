@@ -1,3 +1,4 @@
+import type { AnalyticsApi } from './analytics.js'
 import type { CategoriesApi } from './categories.js'
 import type { ImportApi } from './import.js'
 import type { ProjectApi } from './project.js'
@@ -11,6 +12,7 @@ export type FintoryApi = {
   app: {
     getVersion: () => Promise<string>
   }
+  analytics: AnalyticsApi
   categories: CategoriesApi
   import: ImportApi
   project: ProjectApi

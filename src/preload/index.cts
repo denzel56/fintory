@@ -6,6 +6,15 @@ const appIpcChannels = {
   getVersion: 'app:getVersion',
 } as const
 
+const analyticsIpcChannels = {
+  getDashboard: 'analytics:getDashboard',
+  getExpensesByCategory: 'analytics:getExpensesByCategory',
+  getExpensesByMonth: 'analytics:getExpensesByMonth',
+  getIncomeByMonth: 'analytics:getIncomeByMonth',
+  getLargestExpenses: 'analytics:getLargestExpenses',
+  getPeriodSummary: 'analytics:getPeriodSummary',
+} as const
+
 const categoriesIpcChannels = {
   create: 'categories:create',
   delete: 'categories:delete',
@@ -40,6 +49,17 @@ const transactionsIpcChannels = {
 const fintoryApi: FintoryApi = {
   app: {
     getVersion: () => ipcRenderer.invoke(appIpcChannels.getVersion) as Promise<string>,
+  },
+  analytics: {
+    getDashboard: (query) => ipcRenderer.invoke(analyticsIpcChannels.getDashboard, query),
+    getExpensesByCategory: (query) =>
+      ipcRenderer.invoke(analyticsIpcChannels.getExpensesByCategory, query),
+    getExpensesByMonth: (query) =>
+      ipcRenderer.invoke(analyticsIpcChannels.getExpensesByMonth, query),
+    getIncomeByMonth: (query) => ipcRenderer.invoke(analyticsIpcChannels.getIncomeByMonth, query),
+    getLargestExpenses: (query) =>
+      ipcRenderer.invoke(analyticsIpcChannels.getLargestExpenses, query),
+    getPeriodSummary: (query) => ipcRenderer.invoke(analyticsIpcChannels.getPeriodSummary, query),
   },
   categories: {
     create: (input) => ipcRenderer.invoke(categoriesIpcChannels.create, input),
