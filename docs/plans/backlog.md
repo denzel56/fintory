@@ -71,3 +71,14 @@ When a new non-urgent problem is discovered during implementation or review, add
 - **MVP note:** not critical for MVP; raw imported merchant values are acceptable until transaction browsing needs more polish.
 - **Privacy:** all matching/suggestion logic must stay local; no network lookup, telemetry, external merchant enrichment, or cloud model calls.
 - **Verification:** import sanitized transactions with repeated legal names, confirm suggested aliases can be accepted/edited/ignored, and confirm search still finds both original and alias text where appropriate.
+
+### Refactor analytics IPC handler repetition
+
+- **Status:** open
+- **Priority:** low
+- **Area:** Electron main IPC / analytics backend maintainability
+- **Context:** `src/main/ipc/analytics.ts` registers several analytics handlers that repeat the same flow: validate query, check active project database, create analytics repository, call one repository method, and return a safe error on failure.
+- **Scope:** extract a small typed helper for analytics IPC handlers while keeping every channel explicit, preserving main-process validation, and keeping renderer-facing result types unchanged.
+- **MVP note:** not required before merging the analytics backend; current explicit code is working and easier to review, but refactoring can reduce future maintenance cost before adding more analytics endpoints.
+- **Privacy:** helper must not add logging of raw transactions, CSV rows, account/card values, source hashes, or local paths.
+- **Verification:** `npm run lint`, `npm run build`, and `npm run smoke:sqlite`.
