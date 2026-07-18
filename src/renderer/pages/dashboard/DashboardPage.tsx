@@ -12,7 +12,9 @@ import {
 import { useEffect, useState } from 'react'
 import type { AnalyticsDashboardDto } from '../../../shared/types/analytics'
 import { DashboardCategoryExpensesTable } from './DashboardCategoryExpensesTable'
+import { DashboardCategoryChart } from './DashboardCategoryChart'
 import { DashboardLargestExpensesTable } from './DashboardLargestExpensesTable'
+import { DashboardMonthlyChart } from './DashboardMonthlyChart'
 import { DashboardMonthlyTable } from './DashboardMonthlyTable'
 import { getPeriodLabel } from './dashboard-formatters'
 import { DashboardPeriodFilters } from './DashboardPeriodFilters'
@@ -163,6 +165,11 @@ export function DashboardPage() {
         {dashboardLoadState.status === 'loaded' && hasTransactions ? (
           <Stack gap="lg">
             <DashboardSummaryCards summaries={summaryRows} />
+
+            <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
+              <DashboardMonthlyChart expenses={expensesByMonth} income={incomeByMonth} />
+              <DashboardCategoryChart items={expensesByCategory} />
+            </SimpleGrid>
 
             <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
               <DashboardMonthlyTable
