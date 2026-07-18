@@ -69,6 +69,12 @@ export type CreateTransactionInput = {
   readonly updatedAt: string
 }
 
+export type UpdateTransactionCategoryInput = {
+  readonly categoryId: string | null
+  readonly id: string
+  readonly updatedAt: string
+}
+
 type TransactionRow = {
   readonly amount_minor: number
   readonly category_id: string | null
@@ -117,6 +123,7 @@ export type TransactionsRepository = {
   readonly getFilters: () => TransactionFiltersRecord
   readonly insertIfSourceHashIsNew: (input: CreateTransactionInput) => boolean
   readonly list: (query: ValidatedListTransactionsQuery) => ListTransactionsRepositoryResult
+  readonly updateCategory: (input: UpdateTransactionCategoryInput) => boolean
 }
 
 const sortColumnByField = {
@@ -319,6 +326,13 @@ export function createTransactionsRepository(database: DatabaseSync): Transactio
         totalCount: countRow?.count ?? 0,
         transactions: rows.map(mapListedTransactionRow),
       }
+    },
+    updateCategory: (input) => {
+      const result = database
+        .prepare('UPDATE transactions SET category_id = ?, updated_at = ? WHERE id = ?')
+        .run(input.categoryId, input.updatedAt, input.id)
+
+      return Number(result.changes ?? 0) > 0
     },
   }
 }

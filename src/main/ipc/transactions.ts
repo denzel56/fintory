@@ -4,8 +4,12 @@ import type {
   GetTransactionFiltersResult,
   ListTransactionsResult,
   TransactionDto,
+  UpdateTransactionCategoryResult,
 } from '../../shared/types/transaction.js'
-import { validateListTransactionsQuery } from '../../shared/validation/transaction.js'
+import {
+  validateListTransactionsQuery,
+  validateUpdateTransactionCategoryInput,
+} from '../../shared/validation/transaction.js'
 import { getActiveProjectDatabase } from '../db/project-database-connection.js'
 import { createCategoriesRepository } from '../db/repositories/categories-repository.js'
 import { createTransactionsRepository } from '../db/repositories/transactions-repository.js'
@@ -39,6 +43,8 @@ const toCategoryDto = (category: {
   id: category.id,
   name: category.name,
 })
+
+const getTimestamp = (): string => new Date().toISOString()
 
 export function registerTransactionsIpcHandlers(): void {
   ipcMain.handle(transactionsIpcChannels.list, (_event, input: unknown): ListTransactionsResult => {
@@ -117,4 +123,79 @@ export function registerTransactionsIpcHandlers(): void {
       }
     }
   })
+
+  ipcMain.handle(
+    transactionsIpcChannels.updateCategory,
+    (_event, input: unknown): UpdateTransactionCategoryResult => {
+      const validationResult = validateUpdateTransactionCategoryInput(input)
+
+      if (!validationResult.ok) {
+        return {
+          ok: false,
+          code: validationResult.code,
+          message: validationResult.message,
+        }
+      }
+
+      const database = getActiveProjectDatabase()
+
+      if (!database) {
+        return {
+          ok: false,
+          code: 'project-not-open',
+          message: 'Open or create a project before editing transactions.',
+        }
+      }
+
+      try {
+        const categoriesRepository = createCategoriesRepository(database)
+        const transactionsRepository = createTransactionsRepository(database)
+
+        if (!transactionsRepository.findById(validationResult.value.transactionId)) {
+          return {
+            ok: false,
+            code: 'transaction-not-found',
+            message: 'Transaction was not found.',
+          }
+        }
+
+        if (
+          validationResult.value.categoryId &&
+          !categoriesRepository.findById(validationResult.value.categoryId)
+        ) {
+          return {
+            ok: false,
+            code: 'category-not-found',
+            message: 'Category was not found.',
+          }
+        }
+
+        const wasUpdated = transactionsRepository.updateCategory({
+          categoryId: validationResult.value.categoryId,
+          id: validationResult.value.transactionId,
+          updatedAt: getTimestamp(),
+        })
+
+        if (!wasUpdated) {
+          return {
+            ok: false,
+            code: 'transaction-not-found',
+            message: 'Transaction was not found.',
+          }
+        }
+
+        return {
+          ok: true,
+          categoryId: validationResult.value.categoryId,
+          transactionId: validationResult.value.transactionId,
+        }
+      } catch {
+        return {
+          ok: false,
+          code: 'transaction-category-update-failed',
+          message: 'Transaction category could not be updated right now.',
+        }
+      }
+    },
+  )
 }

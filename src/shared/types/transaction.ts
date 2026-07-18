@@ -29,6 +29,11 @@ export type ListTransactionsQuery = {
   readonly toDate?: string | null
 }
 
+export type UpdateTransactionCategoryInput = {
+  readonly categoryId: string | null
+  readonly transactionId: string
+}
+
 export type ValidatedListTransactionsQuery = {
   readonly categoryId: string | null
   readonly direction: TransactionDirection | null
@@ -59,9 +64,13 @@ export type TransactionFiltersDto = {
 }
 
 export type TransactionsErrorCode =
+  | 'category-not-found'
+  | 'invalid-transaction-category-update'
   | 'invalid-transactions-query'
   | 'project-not-open'
+  | 'transaction-category-update-failed'
   | 'transaction-filters-failed'
+  | 'transaction-not-found'
   | 'transactions-list-failed'
 
 export type ListTransactionsResult =
@@ -70,4 +79,12 @@ export type ListTransactionsResult =
 
 export type GetTransactionFiltersResult =
   | { readonly ok: true; readonly filters: TransactionFiltersDto }
+  | { readonly ok: false; readonly code: TransactionsErrorCode; readonly message: string }
+
+export type UpdateTransactionCategoryResult =
+  | {
+      readonly ok: true
+      readonly categoryId: string | null
+      readonly transactionId: string
+    }
   | { readonly ok: false; readonly code: TransactionsErrorCode; readonly message: string }
