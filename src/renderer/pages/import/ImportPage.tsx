@@ -45,12 +45,13 @@ type ImportBatchesLoadState =
   | { readonly status: 'error'; readonly message: string }
 
 type ImportSuccessResult = Extract<ImportCsvFilesResult, { readonly ok: true }>
+type ImportFailureResult = Extract<ImportCsvFilesResult, { readonly ok: false }>
 
 type CsvImportState =
   | { readonly status: 'idle' }
   | { readonly status: 'importing' }
   | { readonly status: 'success'; readonly result: ImportSuccessResult }
-  | { readonly status: 'error'; readonly message: string }
+  | { readonly status: 'error'; readonly code?: ImportFailureResult['code']; readonly message: string }
 
 type ClearImportHistoryState =
   | { readonly status: 'idle' }
@@ -115,6 +116,22 @@ const formatImportDiagnostic = (diagnostic: ImportDiagnosticDto): string => {
     diagnostic,
   )}${formatDiagnosticRows(diagnostic)}`
 }
+
+const hasImportDiagnosticCode = (
+  result: ImportSuccessResult | null,
+  code: string,
+): boolean =>
+  result?.files.some((file) =>
+    file.diagnostics.some((diagnostic) => diagnostic.code === code),
+  ) ?? false
+
+const hasMalformedImportDiagnostics = (result: ImportSuccessResult | null): boolean =>
+  result?.files.some((file) =>
+    file.diagnostics.some(
+      (diagnostic) =>
+        diagnostic.code === 'malformed-csv-header' || diagnostic.code === 'malformed-csv-row',
+    ),
+  ) ?? false
 
 const createEmptyManualMapping = (): ManualCsvColumnMapping => ({
   amountColumn: '',
@@ -358,7 +375,7 @@ export function ImportPage() {
       })
 
       if (!result.ok) {
-        setCsvImportState({ status: 'error', message: result.message })
+        setCsvImportState({ status: 'error', code: result.code, message: result.message })
         return
       }
 
@@ -455,7 +472,7 @@ export function ImportPage() {
       })
 
       if (!result.ok) {
-        setCsvImportState({ status: 'error', message: result.message })
+        setCsvImportState({ status: 'error', code: result.code, message: result.message })
         return
       }
 
@@ -618,21 +635,72 @@ export function ImportPage() {
   const hasImportedTransactions = (importResult?.insertedCount ?? 0) > 0
   const isUnsupportedCsvResult =
     importResult?.files.some((file) => file.adapterId === 'unsupported-csv-v1') ?? false
-  const importResultTitle = !importResult
-    ? ''
-    : hasImportedTransactions
-      ? hasImportFailures
-        ? 'Import finished with warnings'
-        : 'Import complete'
-      : 'No transactions imported'
-  const importResultDescription = !importResult
-    ? ''
-    : isUnsupportedCsvResult
-      ? 'This CSV format is not supported yet. Check that the file uses columns: date, description, amount, currency.'
-      : hasImportedTransactions
-        ? 'Review safe import totals below. Duplicate transactions were skipped.'
-        : 'No transactions were written to the project. Review failed row counts before trying again.'
-  const importResultAlertColor = hasImportedTransactions && !hasImportFailures ? 'green' : 'yellow'
+  const isEmptyCsvResult = hasImportDiagnosticCode(importResult, 'empty-file')
+  const hasMalformedRows = hasMalformedImportDiagnostics(importResult)
+  const isDuplicateOnlyResult =
+    importResult !== null &&
+    importResult.insertedCount === 0 &&
+    importResult.duplicateCount > 0 &&
+    importResult.failedCount === 0
+  const importErrorTitle =
+    csvImportState.status === 'error' && csvImportState.code === 'csv-import-write-failed'
+      ? 'CSV import was not saved'
+      : 'CSV import unavailable'
+  const importResultTitle = (() => {
+    if (!importResult) {
+      return ''
+    }
+
+    if (isEmptyCsvResult) {
+      return 'CSV file is empty'
+    }
+
+    if (isUnsupportedCsvResult) {
+      return 'Unsupported CSV format'
+    }
+
+    if (isDuplicateOnlyResult) {
+      return 'Only duplicates found'
+    }
+
+    if (hasImportedTransactions) {
+      return hasImportFailures ? 'Import finished with warnings' : 'Import complete'
+    }
+
+    return 'No transactions imported'
+  })()
+  const importResultDescription = (() => {
+    if (!importResult) {
+      return ''
+    }
+
+    if (isEmptyCsvResult) {
+      return 'The selected file does not contain a usable header row. Choose another CSV export or check that the file is not blank.'
+    }
+
+    if (isUnsupportedCsvResult) {
+      return 'This CSV format is not supported yet. Use manual column mapping or check that the file includes date, description, amount, and currency columns.'
+    }
+
+    if (isDuplicateOnlyResult) {
+      return 'All normalized transactions already exist in this project. Nothing new was written.'
+    }
+
+    if (hasMalformedRows) {
+      return 'Import finished, but some rows could not be read safely. Review summarized diagnostics below.'
+    }
+
+    if (hasImportedTransactions) {
+      return 'Review safe import totals below. Duplicate transactions were skipped.'
+    }
+
+    return 'No transactions were written to the project. Review failed row counts before trying again.'
+  })()
+  const importResultAlertColor = isDuplicateOnlyResult
+    ? 'blue'
+    : hasImportedTransactions && !hasImportFailures
+      ? 'green'
+      : 'yellow'
   const manualPreview =
     manualMappingPreviewState.status === 'ready' ? manualMappingPreviewState.preview : null
   const manualColumnOptions =
@@ -909,7 +977,7 @@ export function ImportPage() {
         ) : null}
 
         {csvImportState.status === 'error' ? (
-          <Alert color="yellow" title="CSV import unavailable">
+          <Alert color="yellow" title={importErrorTitle}>
             {csvImportState.message}
           </Alert>
         ) : null}

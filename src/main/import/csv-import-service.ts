@@ -27,7 +27,7 @@ import {
   manualCsvMappingAdapterId,
   normalizeRowsWithManualMapping,
 } from './adapters/manual-csv-mapping-adapter.js'
-import type { CsvParseResult } from './csv-parser.js'
+import type { CsvParseError, CsvParseResult } from './csv-parser.js'
 
 export type CsvImportFileInput = {
   readonly filePath: string
@@ -47,6 +47,36 @@ const csvImportAdapters: readonly CsvImportAdapter[] = [
   genericCsvImportAdapter,
 ]
 const unsupportedAdapterId = 'unsupported-csv-v1'
+
+type ImportCsvFailureCode = Extract<ImportCsvFilesResult, { readonly ok: false }>['code']
+
+class CsvImportServiceError extends Error {
+  readonly code: ImportCsvFailureCode
+
+  constructor(code: ImportCsvFailureCode, message: string) {
+    super(message)
+    this.code = code
+  }
+}
+
+const toImportFailureResult = (
+  error: unknown,
+  fallbackMessage: string,
+): Extract<ImportCsvFilesResult, { readonly ok: false }> => {
+  if (error instanceof CsvImportServiceError) {
+    return {
+      ok: false,
+      code: error.code,
+      message: error.message,
+    }
+  }
+
+  return {
+    ok: false,
+    code: 'csv-import-failed',
+    message: fallbackMessage,
+  }
+}
 
 const getFileHash = (content: Buffer): string =>
   `sha256:${createHash('sha256').update(content).digest('hex')}`
@@ -160,6 +190,22 @@ const toImportDiagnostics = (
   }
 
   return [...diagnosticsByKey.values()]
+}
+
+const toCsvParseImportError = (error: CsvParseError): CsvImportAdapterError => {
+  if (error.code === 'empty-file') {
+    return {
+      code: 'empty-file',
+      message: 'CSV file is empty or does not include a header row.',
+      rowNumber: error.rowNumber,
+    }
+  }
+
+  return {
+    code: error.rowNumber === 1 ? 'malformed-csv-header' : 'malformed-csv-row',
+    message: error.message,
+    rowNumber: error.rowNumber,
+  }
 }
 
 const toTotalSummary = (
@@ -333,8 +379,29 @@ const importCsvFile = async (
   const parseResult = parseCsvText(csvText, { encoding: 'utf8' })
   const adapter = getImportAdapter(parseResult.headers)
 
-  return runInTransaction(database, () => {
-    if (!adapter) {
+  if (adapter) {
+    const adapterResult = adapter.normalizeRows(parseResult)
+
+    try {
+      return runInTransaction(database, () =>
+        importParsedCsvFile({
+          adapterId: adapter.id,
+          adapterResult,
+          database,
+          fileName,
+          sourceFileHash,
+        }),
+      )
+    } catch {
+      throw new CsvImportServiceError(
+        'csv-import-write-failed',
+        'CSV import could not be written to the project database. Try again or reopen the project.',
+      )
+    }
+  }
+
+  try {
+    return runInTransaction(database, () => {
       const failedCount = Math.max(
         1,
         parseResult.rows.length + getFailedRowCount(parseResult.errors),
@@ -351,11 +418,7 @@ const importCsvFile = async (
           rowNumbers: [],
         },
         ...toImportDiagnostics(missingRequiredColumnErrors),
-        ...toImportDiagnostics(parseResult.errors.map((error) => ({
-          code: error.rowNumber === 1 ? 'malformed-csv-header' : 'malformed-csv-row',
-          message: error.message,
-          rowNumber: error.rowNumber,
-        }))),
+        ...toImportDiagnostics(parseResult.errors.map(toCsvParseImportError)),
       ]
 
       return createFailedBatch({
@@ -367,16 +430,13 @@ const importCsvFile = async (
         rowCount: failedCount,
         sourceFileHash,
       })
-    }
-
-    return importParsedCsvFile({
-      adapterId: adapter.id,
-      adapterResult: adapter.normalizeRows(parseResult),
-      database,
-      fileName,
-      sourceFileHash,
     })
-  })
+  } catch {
+    throw new CsvImportServiceError(
+      'csv-import-write-failed',
+      'CSV import could not be written to the project database. Try again or reopen the project.',
+    )
+  }
 }
 
 export const previewCsvFile = async (file: CsvPreviewFileInput): Promise<PreviewCsvFileResult> => {
@@ -417,29 +477,38 @@ export const importCsvFileWithMapping = async ({
     const sourceFileHash = getFileHash(fileContent)
     const fileName = basename(filePath)
     const parseResult: CsvParseResult = parseCsvText(fileContent.toString('utf8'), { encoding: 'utf8' })
+    const adapterResult = normalizeRowsWithManualMapping(parseResult, mapping)
 
-    const summary = runInTransaction(database, () =>
-      importParsedCsvFile({
-        adapterId: manualCsvMappingAdapterId,
-        adapterResult: normalizeRowsWithManualMapping(parseResult, mapping),
-        database,
-        fileName,
-        sourceHashAdapterId: genericCsvImportAdapter.id,
-        sourceFileHash,
-      }),
-    )
+    const summary = (() => {
+      try {
+        return runInTransaction(database, () =>
+          importParsedCsvFile({
+            adapterId: manualCsvMappingAdapterId,
+            adapterResult,
+            database,
+            fileName,
+            sourceHashAdapterId: genericCsvImportAdapter.id,
+            sourceFileHash,
+          }),
+        )
+      } catch {
+        throw new CsvImportServiceError(
+          'csv-import-write-failed',
+          'CSV import could not be written to the project database. Try again or reopen the project.',
+        )
+      }
+    })()
 
     return {
       ok: true,
       files: [summary],
       ...toTotalSummary([summary]),
     }
-  } catch {
-    return {
-      ok: false,
-      code: 'csv-import-failed',
-      message: 'CSV file could not be imported with the selected mapping right now.',
-    }
+  } catch (error) {
+    return toImportFailureResult(
+      error,
+      'CSV file could not be imported with the selected mapping right now.',
+    )
   }
 }
 
@@ -459,11 +528,7 @@ export const importCsvFiles = async ({
       files: summaries,
       ...toTotalSummary(summaries),
     }
-  } catch {
-    return {
-      ok: false,
-      code: 'csv-import-failed',
-      message: 'CSV files could not be imported right now.',
-    }
+  } catch (error) {
+    return toImportFailureResult(error, 'CSV files could not be imported right now.')
   }
 }
