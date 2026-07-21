@@ -76,7 +76,7 @@ export function closeCurrentProject(): CloseProjectResult {
     return {
       ok: false,
       code: 'project-close-failed',
-      message: 'Project database connection could not be closed.',
+      message: 'Project database connection could not be closed. Try again or reopen the app.',
     }
   }
 

@@ -1,7 +1,11 @@
 import { Alert, Button, Card, Group, Stack, Text, TextInput } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
-import type { CurrentProjectDto, CurrentProjectStateDto } from '../../../shared/types/project'
+import type {
+  CurrentProjectDto,
+  CurrentProjectStateDto,
+  ProjectErrorCode,
+} from '../../../shared/types/project'
 import { validateProjectName } from '../../../shared/validation/project'
 
 type ProjectLoadState =
@@ -10,6 +14,30 @@ type ProjectLoadState =
   | { status: 'unavailable'; message: string }
 
 type ProjectAction = 'create' | 'open' | 'close'
+
+type ProjectMessage = {
+  color: 'blue' | 'green' | 'yellow'
+  text: string
+  title: string
+}
+
+const projectFailureTitles = {
+  'invalid-project-name': 'Project name needs attention',
+  'project-create-cancelled': 'Project creation cancelled',
+  'project-database-corrupt': 'Project database is not readable',
+  'project-database-locked': 'Project database is locked',
+  'project-database-open-failed': 'Project could not be opened',
+  'project-migration-failed': 'Project database could not be prepared',
+  'project-not-found': 'Project file not found',
+  'project-open-cancelled': 'Project open cancelled',
+  'project-open-failed': 'Project could not be opened',
+  'project-close-failed': 'Project could not be closed',
+} satisfies Record<ProjectErrorCode, string>
+
+const cancelledProjectErrorCodes = new Set<ProjectErrorCode>([
+  'project-create-cancelled',
+  'project-open-cancelled',
+])
 
 const getProjectStatusText = (projectLoadState: ProjectLoadState): string => {
   if (projectLoadState.status === 'loading') {
@@ -49,6 +77,21 @@ const getOpenProjectLoadState = (project: CurrentProjectDto): ProjectLoadState =
   projectState: { status: 'open', project },
 })
 
+const getProjectFailureMessage = (input: {
+  code: ProjectErrorCode
+  message: string
+}): ProjectMessage => ({
+  color: cancelledProjectErrorCodes.has(input.code) ? 'blue' : 'yellow',
+  text: input.message,
+  title: projectFailureTitles[input.code],
+})
+
+const getProjectSuccessMessage = (text: string): ProjectMessage => ({
+  color: 'green',
+  text,
+  title: 'Project ready',
+})
+
 export function ProjectLifecycleCard() {
   const [projectLoadState, setProjectLoadState] = useState<ProjectLoadState>({
     status: 'loading',
@@ -56,7 +99,18 @@ export function ProjectLifecycleCard() {
   const [projectName, setProjectName] = useState('')
   const [projectNameError, setProjectNameError] = useState<string | null>(null)
   const [projectAction, setProjectAction] = useState<ProjectAction | null>(null)
-  const [projectMessage, setProjectMessage] = useState<string | null>(null)
+  const [projectMessage, setProjectMessage] = useState<ProjectMessage | null>(null)
+
+  const refreshCurrentProjectState = async () => {
+    try {
+      setProjectLoadState(await loadCurrentProjectState())
+    } catch {
+      setProjectLoadState({
+        status: 'unavailable',
+        message: 'Project state is not available right now.',
+      })
+    }
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -100,7 +154,11 @@ export function ProjectLifecycleCard() {
     }
 
     if (!window.fintory) {
-      setProjectMessage('The Electron preload bridge is not available in this runtime.')
+      setProjectMessage({
+        color: 'yellow',
+        text: 'The Electron preload bridge is not available in this runtime.',
+        title: 'Project actions unavailable',
+      })
       return
     }
 
@@ -114,12 +172,20 @@ export function ProjectLifecycleCard() {
         setProjectLoadState(getOpenProjectLoadState(result.project))
         setProjectName('')
         setProjectNameError(null)
-        setProjectMessage('Project created and connected to local SQLite storage.')
+        setProjectMessage(
+          getProjectSuccessMessage('Project created and connected to local SQLite storage.'),
+        )
       } else {
-        setProjectMessage(result.message)
+        setProjectMessage(getProjectFailureMessage(result))
+        await refreshCurrentProjectState()
       }
     } catch {
-      setProjectMessage('Project creation is not available right now.')
+      setProjectMessage({
+        color: 'yellow',
+        text: 'Project creation is not available right now. Try again or choose another location.',
+        title: 'Project creation unavailable',
+      })
+      await refreshCurrentProjectState()
     } finally {
       setProjectAction(null)
     }
@@ -127,7 +193,11 @@ export function ProjectLifecycleCard() {
 
   const handleOpenProject = async () => {
     if (!window.fintory) {
-      setProjectMessage('The Electron preload bridge is not available in this runtime.')
+      setProjectMessage({
+        color: 'yellow',
+        text: 'The Electron preload bridge is not available in this runtime.',
+        title: 'Project actions unavailable',
+      })
       return
     }
 
@@ -139,12 +209,20 @@ export function ProjectLifecycleCard() {
 
       if (result.ok) {
         setProjectLoadState(getOpenProjectLoadState(result.project))
-        setProjectMessage('Project opened and connected to local SQLite storage.')
+        setProjectMessage(
+          getProjectSuccessMessage('Project opened and connected to local SQLite storage.'),
+        )
       } else {
-        setProjectMessage(result.message)
+        setProjectMessage(getProjectFailureMessage(result))
+        await refreshCurrentProjectState()
       }
     } catch {
-      setProjectMessage('Project open is not available right now.')
+      setProjectMessage({
+        color: 'yellow',
+        text: 'Project open is not available right now. Try again or choose another project.',
+        title: 'Project open unavailable',
+      })
+      await refreshCurrentProjectState()
     } finally {
       setProjectAction(null)
     }
@@ -152,7 +230,11 @@ export function ProjectLifecycleCard() {
 
   const handleCloseProject = async () => {
     if (!window.fintory) {
-      setProjectMessage('The Electron preload bridge is not available in this runtime.')
+      setProjectMessage({
+        color: 'yellow',
+        text: 'The Electron preload bridge is not available in this runtime.',
+        title: 'Project actions unavailable',
+      })
       return
     }
 
@@ -164,12 +246,18 @@ export function ProjectLifecycleCard() {
 
       if (result.ok) {
         setProjectLoadState({ status: 'available', projectState: { status: 'none' } })
-        setProjectMessage('Project closed.')
+        setProjectMessage({ color: 'green', text: 'Project closed.', title: 'Project closed' })
       } else {
-        setProjectMessage(result.message)
+        setProjectMessage(getProjectFailureMessage(result))
+        await refreshCurrentProjectState()
       }
     } catch {
-      setProjectMessage('Project close is not available right now.')
+      setProjectMessage({
+        color: 'yellow',
+        text: 'Project close is not available right now. Try again or reopen the app if the project remains unavailable.',
+        title: 'Project close unavailable',
+      })
+      await refreshCurrentProjectState()
     } finally {
       setProjectAction(null)
     }
@@ -221,8 +309,8 @@ export function ProjectLifecycleCard() {
         </Group>
 
         {projectMessage ? (
-          <Alert color="blue" variant="light">
-            {projectMessage}
+          <Alert color={projectMessage.color} title={projectMessage.title} variant="light">
+            {projectMessage.text}
           </Alert>
         ) : null}
       </Stack>
