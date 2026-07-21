@@ -94,11 +94,21 @@ const createRowError = (
   rowNumber,
 })
 
-const mapParseError = (error: CsvParseError): CsvImportAdapterError => ({
-  code: error.rowNumber === 1 ? 'malformed-csv-header' : 'malformed-csv-row',
-  message: error.message,
-  rowNumber: error.rowNumber,
-})
+const mapParseError = (error: CsvParseError): CsvImportAdapterError => {
+  if (error.code === 'empty-file') {
+    return {
+      code: 'empty-file',
+      message: 'CSV file is empty or does not include a header row.',
+      rowNumber: error.rowNumber,
+    }
+  }
+
+  return {
+    code: error.rowNumber === 1 ? 'malformed-csv-header' : 'malformed-csv-row',
+    message: error.message,
+    rowNumber: error.rowNumber,
+  }
+}
 
 const getMappedValue = (row: ParsedCsvRow, columnName: string): string => {
   return (row.values[columnName] ?? '').trim()
