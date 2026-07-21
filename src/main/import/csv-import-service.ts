@@ -27,7 +27,7 @@ import {
   manualCsvMappingAdapterId,
   normalizeRowsWithManualMapping,
 } from './adapters/manual-csv-mapping-adapter.js'
-import type { CsvParseResult } from './csv-parser.js'
+import type { CsvParseError, CsvParseResult } from './csv-parser.js'
 
 export type CsvImportFileInput = {
   readonly filePath: string
@@ -47,6 +47,36 @@ const csvImportAdapters: readonly CsvImportAdapter[] = [
   genericCsvImportAdapter,
 ]
 const unsupportedAdapterId = 'unsupported-csv-v1'
+
+type ImportCsvFailureCode = Extract<ImportCsvFilesResult, { readonly ok: false }>['code']
+
+class CsvImportServiceError extends Error {
+  readonly code: ImportCsvFailureCode
+
+  constructor(code: ImportCsvFailureCode, message: string) {
+    super(message)
+    this.code = code
+  }
+}
+
+const toImportFailureResult = (
+  error: unknown,
+  fallbackMessage: string,
+): Extract<ImportCsvFilesResult, { readonly ok: false }> => {
+  if (error instanceof CsvImportServiceError) {
+    return {
+      ok: false,
+      code: error.code,
+      message: error.message,
+    }
+  }
+
+  return {
+    ok: false,
+    code: 'csv-import-failed',
+    message: fallbackMessage,
+  }
+}
 
 const getFileHash = (content: Buffer): string =>
   `sha256:${createHash('sha256').update(content).digest('hex')}`
@@ -160,6 +190,22 @@ const toImportDiagnostics = (
   }
 
   return [...diagnosticsByKey.values()]
+}
+
+const toCsvParseImportError = (error: CsvParseError): CsvImportAdapterError => {
+  if (error.code === 'empty-file') {
+    return {
+      code: 'empty-file',
+      message: 'CSV file is empty or does not include a header row.',
+      rowNumber: error.rowNumber,
+    }
+  }
+
+  return {
+    code: error.rowNumber === 1 ? 'malformed-csv-header' : 'malformed-csv-row',
+    message: error.message,
+    rowNumber: error.rowNumber,
+  }
 }
 
 const toTotalSummary = (
@@ -277,17 +323,26 @@ const createImportBatchFromAdapterResult = (input: {
   }
 }
 
-const importParsedCsvFile = (input: {
+type PreparedParsedCsvImport = {
+  readonly adapterId: string
+  readonly diagnostics: readonly ImportDiagnosticDto[]
+  readonly draftItems: readonly TransactionSourceHash[]
+  readonly failedCount: number
+  readonly fileName: string
+  readonly rowCount: number
+  readonly sourceFileHash: string
+}
+
+const prepareParsedCsvImport = (input: {
   readonly adapterId: string
   readonly adapterResult: {
     readonly drafts: readonly TransactionDraft[]
     readonly errors: readonly CsvImportAdapterError[]
   }
-  readonly database: DatabaseSync
   readonly fileName: string
   readonly sourceHashAdapterId?: string
   readonly sourceFileHash: string
-}): ImportCsvFileSummaryDto => {
+}): PreparedParsedCsvImport => {
   const failedCount = getFailedRowCount(input.adapterResult.errors)
   const diagnostics = toImportDiagnostics(input.adapterResult.errors)
   const rowCount = getImportRowCount({
@@ -295,30 +350,48 @@ const importParsedCsvFile = (input: {
     failedCount,
   })
 
-  if (input.adapterResult.drafts.length === 0) {
-    return createFailedBatch({
-      adapterId: input.adapterId,
-      database: input.database,
-      diagnostics,
-      failedCount,
-      fileName: input.fileName,
-      rowCount,
-      sourceFileHash: input.sourceFileHash,
-    })
-  }
-
-  return createImportBatchFromAdapterResult({
+  return {
     adapterId: input.adapterId,
-    database: input.database,
     diagnostics,
-    draftItems: createTransactionSourceHashes(
-      input.sourceHashAdapterId ?? input.adapterId,
-      input.adapterResult.drafts,
-    ),
+    draftItems:
+      input.adapterResult.drafts.length > 0
+        ? createTransactionSourceHashes(
+            input.sourceHashAdapterId ?? input.adapterId,
+            input.adapterResult.drafts,
+          )
+        : [],
     failedCount,
     fileName: input.fileName,
     rowCount,
     sourceFileHash: input.sourceFileHash,
+  }
+}
+
+const writePreparedParsedCsvImport = (
+  database: DatabaseSync,
+  preparedImport: PreparedParsedCsvImport,
+): ImportCsvFileSummaryDto => {
+  if (preparedImport.draftItems.length === 0) {
+    return createFailedBatch({
+      adapterId: preparedImport.adapterId,
+      database,
+      diagnostics: preparedImport.diagnostics,
+      failedCount: preparedImport.failedCount,
+      fileName: preparedImport.fileName,
+      rowCount: preparedImport.rowCount,
+      sourceFileHash: preparedImport.sourceFileHash,
+    })
+  }
+
+  return createImportBatchFromAdapterResult({
+    adapterId: preparedImport.adapterId,
+    database,
+    diagnostics: preparedImport.diagnostics,
+    draftItems: preparedImport.draftItems,
+    failedCount: preparedImport.failedCount,
+    fileName: preparedImport.fileName,
+    rowCount: preparedImport.rowCount,
+    sourceFileHash: preparedImport.sourceFileHash,
   })
 }
 
@@ -333,32 +406,49 @@ const importCsvFile = async (
   const parseResult = parseCsvText(csvText, { encoding: 'utf8' })
   const adapter = getImportAdapter(parseResult.headers)
 
-  return runInTransaction(database, () => {
-    if (!adapter) {
-      const failedCount = Math.max(
-        1,
-        parseResult.rows.length + getFailedRowCount(parseResult.errors),
-      )
-      const missingRequiredColumnErrors = csvImportAdapters.flatMap((candidateAdapter) =>
-        getMissingRequiredColumnErrors(candidateAdapter, parseResult.headers),
-      )
-      const diagnostics: readonly ImportDiagnosticDto[] = [
-        {
-          code: 'unsupported-csv-format',
-          count: 1,
-          message:
-            'CSV format is not supported yet. Expected columns include date, description, amount, and currency.',
-          rowNumbers: [],
-        },
-        ...toImportDiagnostics(missingRequiredColumnErrors),
-        ...toImportDiagnostics(parseResult.errors.map((error) => ({
-          code: error.rowNumber === 1 ? 'malformed-csv-header' : 'malformed-csv-row',
-          message: error.message,
-          rowNumber: error.rowNumber,
-        }))),
-      ]
+  if (adapter) {
+    const adapterResult = adapter.normalizeRows(parseResult)
+    const preparedImport = prepareParsedCsvImport({
+      adapterId: adapter.id,
+      adapterResult,
+      fileName,
+      sourceFileHash,
+    })
 
-      return createFailedBatch({
+    try {
+      return runInTransaction(database, () =>
+        writePreparedParsedCsvImport(database, preparedImport),
+      )
+    } catch {
+      throw new CsvImportServiceError(
+        'csv-import-write-failed',
+        'CSV import could not be written to the project database. Try again or reopen the project.',
+      )
+    }
+  }
+
+  const failedCount = Math.max(
+    1,
+    parseResult.rows.length + getFailedRowCount(parseResult.errors),
+  )
+  const missingRequiredColumnErrors = csvImportAdapters.flatMap((candidateAdapter) =>
+    getMissingRequiredColumnErrors(candidateAdapter, parseResult.headers),
+  )
+  const diagnostics: readonly ImportDiagnosticDto[] = [
+    {
+      code: 'unsupported-csv-format',
+      count: 1,
+      message:
+        'CSV format is not supported yet. Expected columns include date, description, amount, and currency.',
+      rowNumbers: [],
+    },
+    ...toImportDiagnostics(missingRequiredColumnErrors),
+    ...toImportDiagnostics(parseResult.errors.map(toCsvParseImportError)),
+  ]
+
+  try {
+    return runInTransaction(database, () =>
+      createFailedBatch({
         adapterId: unsupportedAdapterId,
         database,
         diagnostics,
@@ -366,17 +456,14 @@ const importCsvFile = async (
         fileName,
         rowCount: failedCount,
         sourceFileHash,
-      })
-    }
-
-    return importParsedCsvFile({
-      adapterId: adapter.id,
-      adapterResult: adapter.normalizeRows(parseResult),
-      database,
-      fileName,
-      sourceFileHash,
-    })
-  })
+      }),
+    )
+  } catch {
+    throw new CsvImportServiceError(
+      'csv-import-write-failed',
+      'CSV import could not be written to the project database. Try again or reopen the project.',
+    )
+  }
 }
 
 export const previewCsvFile = async (file: CsvPreviewFileInput): Promise<PreviewCsvFileResult> => {
@@ -417,29 +504,38 @@ export const importCsvFileWithMapping = async ({
     const sourceFileHash = getFileHash(fileContent)
     const fileName = basename(filePath)
     const parseResult: CsvParseResult = parseCsvText(fileContent.toString('utf8'), { encoding: 'utf8' })
+    const adapterResult = normalizeRowsWithManualMapping(parseResult, mapping)
+    const preparedImport = prepareParsedCsvImport({
+      adapterId: manualCsvMappingAdapterId,
+      adapterResult,
+      fileName,
+      sourceHashAdapterId: genericCsvImportAdapter.id,
+      sourceFileHash,
+    })
 
-    const summary = runInTransaction(database, () =>
-      importParsedCsvFile({
-        adapterId: manualCsvMappingAdapterId,
-        adapterResult: normalizeRowsWithManualMapping(parseResult, mapping),
-        database,
-        fileName,
-        sourceHashAdapterId: genericCsvImportAdapter.id,
-        sourceFileHash,
-      }),
-    )
+    const summary = (() => {
+      try {
+        return runInTransaction(database, () =>
+          writePreparedParsedCsvImport(database, preparedImport),
+        )
+      } catch {
+        throw new CsvImportServiceError(
+          'csv-import-write-failed',
+          'CSV import could not be written to the project database. Try again or reopen the project.',
+        )
+      }
+    })()
 
     return {
       ok: true,
       files: [summary],
       ...toTotalSummary([summary]),
     }
-  } catch {
-    return {
-      ok: false,
-      code: 'csv-import-failed',
-      message: 'CSV file could not be imported with the selected mapping right now.',
-    }
+  } catch (error) {
+    return toImportFailureResult(
+      error,
+      'CSV file could not be imported with the selected mapping right now.',
+    )
   }
 }
 
@@ -459,11 +555,7 @@ export const importCsvFiles = async ({
       files: summaries,
       ...toTotalSummary(summaries),
     }
-  } catch {
-    return {
-      ok: false,
-      code: 'csv-import-failed',
-      message: 'CSV files could not be imported right now.',
-    }
+  } catch (error) {
+    return toImportFailureResult(error, 'CSV files could not be imported right now.')
   }
 }

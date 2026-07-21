@@ -62,6 +62,7 @@ coverage
 
 # Local docs drafts
 /docs
+PROJECT_PRESENTATION.md
 
 # Local workflow notes
 ISSUE_WORKFLOW.local.md

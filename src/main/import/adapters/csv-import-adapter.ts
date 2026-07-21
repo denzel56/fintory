@@ -3,6 +3,7 @@ import type { TransactionDraft } from '../transaction-draft.js'
 
 export type CsvImportAdapterErrorCode =
   | 'ambiguous-required-column'
+  | 'empty-file'
   | 'invalid-amount'
   | 'invalid-currency'
   | 'invalid-date'

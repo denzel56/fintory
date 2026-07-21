@@ -91,6 +91,7 @@ export type ImportCsvFilesResult =
       readonly ok: false
       readonly code:
         | 'csv-import-failed'
+        | 'csv-import-write-failed'
         | 'invalid-csv-import-input'
         | 'project-not-open'
         | 'selected-csv-file-not-found'
