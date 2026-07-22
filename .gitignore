@@ -19,6 +19,12 @@ dist-ssr
 .env.*
 !.env.example
 
+# Signing secrets
+*.pfx
+*.p12
+*.pem
+*.key
+
 # Test / coverage
 coverage
 .vitest

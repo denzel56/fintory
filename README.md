@@ -236,6 +236,10 @@ Packaging is currently a local spike only. It must not add auto-updates,
 telemetry, crash reporting, cloud sync, bank APIs, or network-dependent runtime
 behavior.
 
+MVP Windows builds are currently unsigned. Do not add certificates, signing
+secrets, CI signing, or installer signing until a separate release/signing task.
+See `WINDOWS_CODE_SIGNING.md` for the current decision and open questions.
+
 ---
 
 # Development Principles
