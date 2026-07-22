@@ -35,7 +35,10 @@ export type CloseProjectResult =
 export type ProjectErrorCode =
   | 'invalid-project-name'
   | 'project-create-cancelled'
+  | 'project-database-corrupt'
+  | 'project-database-locked'
   | 'project-database-open-failed'
+  | 'project-migration-failed'
   | 'project-not-found'
   | 'project-open-cancelled'
   | 'project-open-failed'

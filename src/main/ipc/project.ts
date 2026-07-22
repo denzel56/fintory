@@ -2,8 +2,14 @@ import { existsSync } from 'node:fs'
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import type { OpenDialogOptions, SaveDialogOptions } from 'electron'
 import { projectIpcChannels } from '../../shared/ipc/project.js'
-import type { CreateProjectInput } from '../../shared/types/project.js'
+import type {
+  CreateProjectInput,
+  CreateProjectResult,
+  OpenProjectResult,
+  ProjectErrorCode,
+} from '../../shared/types/project.js'
 import { validateCreateProjectInput } from '../../shared/validation/project.js'
+import { ProjectDatabaseConnectionError } from '../db/project-database-connection.js'
 import {
   closeCurrentProject,
   getCurrentProjectState,
@@ -11,6 +17,37 @@ import {
   getProjectNameFromFilePath,
   openCurrentProject,
 } from '../project/project-state.js'
+
+const projectDatabaseFailureMessages: Partial<Record<ProjectErrorCode, string>> = {
+  'project-database-corrupt':
+    'This project database could not be read safely. Choose another project or restore a backup.',
+  'project-database-locked':
+    'This project database appears to be in use by another process. Close other apps using it, then try again.',
+  'project-database-open-failed':
+    'Project database could not be opened. Choose another project or try again.',
+  'project-migration-failed':
+    'Project database could not be prepared for this app version. Choose another project or restore a backup.',
+}
+
+const toProjectDatabaseFailureResult = (
+  error: unknown,
+): Extract<CreateProjectResult | OpenProjectResult, { ok: false }> => {
+  if (error instanceof ProjectDatabaseConnectionError) {
+    return {
+      ok: false,
+      code: error.code,
+      message:
+        projectDatabaseFailureMessages[error.code] ??
+        'Project database could not be opened. Choose another project or try again.',
+    }
+  }
+
+  return {
+    ok: false,
+    code: 'project-database-open-failed',
+    message: 'Project database could not be opened. Choose another project or try again.',
+  }
+}
 
 export function registerProjectIpcHandlers(): void {
   ipcMain.handle(projectIpcChannels.getCurrent, () => getCurrentProjectState())
@@ -59,12 +96,8 @@ export function registerProjectIpcHandlers(): void {
           seedDefaultCategories: !projectFileAlreadyExists,
         }),
       }
-    } catch {
-      return {
-        ok: false,
-        code: 'project-database-open-failed',
-        message: 'Project database could not be opened.',
-      }
+    } catch (error) {
+      return toProjectDatabaseFailureResult(error)
     }
   })
 
@@ -100,6 +133,14 @@ export function registerProjectIpcHandlers(): void {
       }
     }
 
+    if (!existsSync(filePath)) {
+      return {
+        ok: false,
+        code: 'project-not-found',
+        message: 'Selected project file is no longer available. Choose another project file.',
+      }
+    }
+
     try {
       return {
         ok: true,
@@ -108,12 +149,8 @@ export function registerProjectIpcHandlers(): void {
           name: getProjectNameFromFilePath(filePath),
         }),
       }
-    } catch {
-      return {
-        ok: false,
-        code: 'project-database-open-failed',
-        message: 'Project database could not be opened.',
-      }
+    } catch (error) {
+      return toProjectDatabaseFailureResult(error)
     }
   })
 
