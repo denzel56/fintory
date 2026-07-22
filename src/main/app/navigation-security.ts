@@ -14,7 +14,20 @@ export const getDevServerUrl = (): URL | null => {
     return null
   }
 
-  return new URL(configuredUrl)
+  try {
+    const devServerUrl = new URL(configuredUrl)
+
+    if (
+      devServerUrl.protocol !== 'http:' ||
+      !['127.0.0.1', 'localhost', '[::1]'].includes(devServerUrl.hostname)
+    ) {
+      return null
+    }
+
+    return devServerUrl
+  } catch {
+    return null
+  }
 }
 
 const isAllowedNavigation = (
@@ -22,7 +35,13 @@ const isAllowedNavigation = (
   devServerUrl: URL | null,
   rendererBuildUrl: string,
 ): boolean => {
-  const parsedTargetUrl = new URL(targetUrl)
+  let parsedTargetUrl: URL
+
+  try {
+    parsedTargetUrl = new URL(targetUrl)
+  } catch {
+    return false
+  }
 
   if (devServerUrl) {
     return parsedTargetUrl.origin === devServerUrl.origin
