@@ -222,6 +222,22 @@ methods.
 
 ---
 
+# Development Commands
+
+Useful local checks and packaging commands:
+
+* `npm run lint` checks code style.
+* `npm run build` builds the renderer and Electron main/preload code.
+* `npm run smoke:sqlite` verifies local SQLite migrations and repository basics.
+* `npm run smoke:csv-import` verifies the CSV import pipeline with sanitized data.
+* `npm run package:win` builds an unpacked Windows app in `release/win-unpacked`.
+
+Packaging is currently a local spike only. It must not add auto-updates,
+telemetry, crash reporting, cloud sync, bank APIs, or network-dependent runtime
+behavior.
+
+---
+
 # Development Principles
 
 Every implementation should prioritize:

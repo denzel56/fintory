@@ -10,6 +10,7 @@
     "build": "tsc -b && vite build && npm run build:electron",
     "build:electron": "tsc -p tsconfig.electron.json",
     "lint": "eslint .",
+    "package:win": "npm run build && electron-builder --win --dir --publish never",
     "preview": "vite preview",
     "smoke:csv-adapter": "npm run build:electron && node scripts/smoke-csv-adapter.mjs",
     "smoke:csv-import": "npm run build:electron && node scripts/smoke-csv-import.mjs",
@@ -17,6 +18,29 @@
     "smoke:source-hash": "npm run build:electron && node scripts/smoke-source-hash.mjs",
     "smoke:sqlite": "npm run build:electron && node scripts/smoke-sqlite-electron.mjs",
     "start:electron": "npm run build && electron ."
+  },
+  "build": {
+    "appId": "app.fintory.desktop",
+    "productName": "Fintory",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
   },
   "dependencies": {
     "@mantine/core": "^9.4.1",
@@ -31,6 +55,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "electron": "^42.5.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^10.5.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",

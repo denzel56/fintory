@@ -1,16 +1,14 @@
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { getDevServerUrl, registerNavigationSecurity } from './navigation-security.js'
 
-const currentFilePath = fileURLToPath(import.meta.url)
-const currentDirectory = path.dirname(currentFilePath)
-const projectRoot = path.resolve(currentDirectory, '../../..')
-const rendererBuildPath = path.join(projectRoot, 'dist', 'index.html')
-const preloadPath = path.join(projectRoot, 'dist-electron', 'preload', 'index.cjs')
+const getAppAssetPath = (...segments: string[]): string =>
+  path.join(app.getAppPath(), ...segments)
 
 export const createMainWindow = async (): Promise<void> => {
   const devServerUrl = getDevServerUrl()
+  const rendererBuildPath = getAppAssetPath('dist', 'index.html')
+  const preloadPath = getAppAssetPath('dist-electron', 'preload', 'index.cjs')
   const mainWindow = new BrowserWindow({
     width: 1180,
     height: 780,
