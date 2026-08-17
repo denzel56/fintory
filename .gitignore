@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-electron
+release
 dist-ssr
 *.local
 
@@ -17,6 +18,12 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Signing secrets
+*.pfx
+*.p12
+*.pem
+*.key
 
 # Test / coverage
 coverage
